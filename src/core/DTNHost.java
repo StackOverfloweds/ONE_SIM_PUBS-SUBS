@@ -161,7 +161,6 @@ public class DTNHost implements Comparable<DTNHost> {
         // this.ema = new ArrayList<Double>();
         // this.ema.add(0.0);
     }
-
     /**
      * Returns a new network interface address and increments the address for
      * subsequent calls.
@@ -626,5 +625,29 @@ public class DTNHost implements Comparable<DTNHost> {
         }
         return cek.toString();
     }
+
+    // identified the publish, broker and subscriber
+    public boolean isPublisher() {
+        return this.isPublisher;
+    }
+    public boolean isBroker() {
+        return this.isBroker;
+
+    }
+    public boolean isSubscriber() {
+        return this.isSubscriber;
+    }
+
+    public List<Double> getInterest() {
+        return interest;
+    }
+    public void setInterest(List<Double> newInterest) {
+        interest = newInterest;
+    }
+    public List<Boolean> getOwnInterest() {
+        return ownInterest;
+    }
+
+
 
 }
