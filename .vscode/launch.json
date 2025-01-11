@@ -48,6 +48,18 @@
                 "./conf/PeopleRankActive.txt"
             ],
             "preLaunchCommand": "bash compile.sh"
+        },
+        {
+            "type": "java",
+            "name": "Publish And Subscribe",
+            "request": "launch",
+            "mainClass": "core.DTNSim",
+            "args": [
+                "-b",
+                "1",
+                "./conf/PublishAndSubsc_Setting.txt"
+            ],
+            "preLaunchCommand": "bash compile.sh"
         }
     ]
 }

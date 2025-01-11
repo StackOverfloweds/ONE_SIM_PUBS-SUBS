@@ -22,7 +22,6 @@ public class ContentRouter extends ActiveRouter {
     // create some initial variable 
     public static final String MESSAGE_TOPICS_S = "topic";
 
-
     protected  Map<DTNHost, Double> startTimestamps;
     protected Map <DTNHost, List<Duration>> connHistory;
 
@@ -62,37 +61,36 @@ public class ContentRouter extends ActiveRouter {
     }
 
 
-     @Override
-     public void changedConnection (Connection con) {
+    @Override
+	public void changedConnection(Connection con) {
         DTNHost peer = con.getOtherNode(getHost());
 
-        if (con.isUp()) {
-            ContentRouter othRouter = (ContentRouter) peer.getRouter();
-            this.startTimestamps.put(peer, SimClock.getTime());
-            othRouter.startTimestamps.put(getHost(), SimClock.getTime());
-        } else {
-            if (startTimestamps.containsKey(peer)) {
-                double time = startTimestamps.get(peer);
-                double etime = SimClock.getTime() - time;
-                
-                List<Duration> history;
-                if (!connHistory.containsKey(peer)) {
-                    history = new LinkedList<>();
-                    connHistory.put(peer, history);
-                }else 
-                    history = connHistory.get(peer);
+		if (con.isUp()) {
+			ContentRouter othRouter = (ContentRouter) peer.getRouter();
+			this.startTimestamps.put(peer, SimClock.getTime());
+			othRouter.startTimestamps.put(getHost(), SimClock.getTime());
+		} else {
+			if (startTimestamps.containsKey(peer)) {
+				double time = startTimestamps.get(peer);
+				double etime = SimClock.getTime();
 
+				// Find or create the connection history list
+				List<Duration> history;
+				if (!connHistory.containsKey(peer)) {
+					history = new LinkedList<>();
+					connHistory.put(peer, history);
+				} else
+					history = connHistory.get(peer);
 
 				// add this connection to the list
 				if (etime - time > 0)
-                history.add(new Duration(time, etime));
+					history.add(new Duration(time, etime));
 
-                startTimestamps.remove(peer);
-              
-            }
-                
-            }
-     }
+				startTimestamps.remove(peer);
+			}
+		}
+		// }
+    }
 
      @Override
      public void update() {
@@ -274,6 +272,7 @@ public class ContentRouter extends ActiveRouter {
      
  
      protected List<Double> countInterestTopic(Message m, DTNHost host) {
+        System.out.println("test");
          List<Boolean> topicMSG = (ArrayList) m.getProperty(MESSAGE_TOPICS_S);
          List <Boolean> topicNode = host.getOwnInterest();
          List<Double> weightNode = host.getInterest();
