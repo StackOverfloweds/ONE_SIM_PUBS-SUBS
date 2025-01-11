@@ -92,7 +92,7 @@ public class DTNHost implements Comparable<DTNHost> {
 
         if (groupId.startsWith("S")) {
             isSubscriber = true;
-            name = "Subscriber_" + groupId + "_" +address;
+            name = "Subscriber_" + groupId + "_" + address;
         } else if (groupId.startsWith("P")) {
             isPublisher = true;
             name = "Publisher_" + groupId + "_" + address;
@@ -100,7 +100,8 @@ public class DTNHost implements Comparable<DTNHost> {
             isBroker = true;
             name = "Broker_" + groupId + "_" + address;
         } else {
-            throw new IllegalArgumentException("Invalid Group ID");
+            // Jika GroupID tidak sesuai dengan peran yang ditentukan
+            throw new IllegalArgumentException("Invalid GroupID: " + groupId);
         }
 
         // create subscriber interest for something random
@@ -110,10 +111,10 @@ public class DTNHost implements Comparable<DTNHost> {
             interest = new ArrayList<Double>();
 
             // just set random value for interest subsriber
-            double numInterest = 0.0 +random.nextDouble(1.0);
+            int numInterest = 1 +random.nextInt(5);
 
             // looping for the interest
-            while (numInterest > 0.0) {
+            while (numInterest > 0) {
                 double interestValue = random.nextDouble();
                 interest.add(interestValue);
                 ownInterest.add(true);
