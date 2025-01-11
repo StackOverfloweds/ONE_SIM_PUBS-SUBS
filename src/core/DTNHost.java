@@ -5,13 +5,10 @@
 package core;
 
 import java.util.*;
-
 import movement.MovementModel;
 import movement.Path;
 import routing.MessageRouter;
 import routing.RoutingInfo;
-
-// tambahan
 import routing.community.Duration;
 
 /**
@@ -51,6 +48,14 @@ public class DTNHost implements Comparable<DTNHost> {
     public Map<DTNHost, Duration> durPerNode;
     public Map<DTNHost, List<Duration>> listDurPerNode;
     public double totalContactTime = 0;
+
+    // crete variable for pubs-susb
+    private boolean isPublisher = false;
+    private boolean isBroker = false;
+    private boolean isSubscriber = false;
+
+    private List<Double> interest;
+    private List<Boolean> ownInterest;
         
     static {
         DTNSim.registerForReset(DTNHost.class.getCanonicalName());
@@ -76,8 +81,47 @@ public class DTNHost implements Comparable<DTNHost> {
         this.comBus = comBus;
         this.location = new Coord(0, 0);
         this.address = getNextAddress();
-        this.name = groupId + address;
         this.net = new ArrayList<NetworkInterface>();
+
+        // create initial node
+        this.isPublisher = false;
+        this.isSubscriber = false;
+        this.isBroker = false;
+
+        // create role for pubs-subs with group
+
+        if (groupId.startsWith("S")) {
+            isSubscriber = true;
+            name = "Subscriber_" + groupId + "_" + address;
+        } else if (groupId.startsWith("P")) {
+            isPublisher = true;
+            name = "Publisher_" + groupId + "_" + address;
+        } else if (groupId.startsWith("B")) {
+            isBroker = true;
+            name = "Broker_" + groupId + "_" + address;
+        } else {
+            // Jika GroupID tidak sesuai dengan peran yang ditentukan
+            throw new IllegalArgumentException("Invalid GroupID: " + groupId);
+        }
+
+        // create subscriber interest for something random
+        if (isSubscriber) {
+            Random random = new Random();
+            ownInterest = new ArrayList<Boolean>();
+            interest = new ArrayList<Double>();
+
+            // just set random value for interest subsriber
+            int numInterest = 1 +random.nextInt(5);
+
+            // looping for the interest
+            while (numInterest > 0) {
+                double interestValue = random.nextDouble();
+                interest.add(interestValue);
+                ownInterest.add(true);
+                numInterest--;
+            }
+
+        }       
 
         for (NetworkInterface i : interf) {
             NetworkInterface ni = i.replicate();
@@ -118,7 +162,6 @@ public class DTNHost implements Comparable<DTNHost> {
         // this.ema = new ArrayList<Double>();
         // this.ema.add(0.0);
     }
-
     /**
      * Returns a new network interface address and increments the address for
      * subsequent calls.
@@ -583,5 +626,29 @@ public class DTNHost implements Comparable<DTNHost> {
         }
         return cek.toString();
     }
+
+    // identified the publish, broker and subscriber
+    public boolean isPublisher() {
+        return this.isPublisher;
+    }
+    public boolean isBroker() {
+        return this.isBroker;
+
+    }
+    public boolean isSubscriber() {
+        return this.isSubscriber;
+    }
+
+    public List<Double> getInterest() {
+        return interest;
+    }
+    public void setInterest(List<Double> newInterest) {
+        interest = newInterest;
+    }
+    public List<Boolean> getOwnInterest() {
+        return ownInterest;
+    }
+
+
 
 }
