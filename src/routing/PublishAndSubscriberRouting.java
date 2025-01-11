@@ -9,14 +9,10 @@ import java.util.List;
 
 public class PublishAndSubscriberRouting extends ContentRouter {
 
-    /** namespace settings ({@value}) */
-    private static final String PNS_NS = "PublishAndSubscriberRouting";
-    /** nilai update interval atur di settings */
 
     public PublishAndSubscriberRouting(Settings s) {
         // Call the superclass constructor to initialize inherited fields
         super(s);
-        Settings pns = new Settings(PNS_NS); 
 
     }
 
