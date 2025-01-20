@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # Main container that acts as the communication gateway
+  main_container:
+    image: one_sim_main:latest  # Image for the main container
+    build:
+      context: .
+      dockerfile: dockerSetup/Dockerfile.main  # Use the main container Dockerfile
+    volumes:
+      - ./conf:/app/conf
+      - ./data:/app/data
+      - ./reports:/app/reports
+    networks:
+      overlay_network:
+        ipv4_address: "10.5.0.2"  # Static IP for main_container
+    container_name: main_container
+    ports:
+      - "8080:8080"  # Expose port 8080
+
+  # Container for building and compiling the simulator
+  build_simulator:
+    image: build_simulator:latest
+    build:
+      context: .
+      dockerfile: dockerSetup/Dockerfile.builds  # Build image from Dockerfile
+    volumes:
+      - ./conf:/app/conf
+      - ./data:/app/data
+      - ./reports:/app/reports
+    networks:
+      overlay_network:
+        ipv4_address: "10.5.0.3"  # Static IP for build_simulator
+    container_name: build_simulator
+    depends_on:
+      - main_container
+
+  # Container for running the simulator (isolated from each other)
+  run_simulator:
+    image: one_sim_run:latest  # Image for the run_simulator container
+    build:
+      context: .
+      dockerfile: dockerSetup/Dockerfile.run  # Build image from Dockerfile
+    volumes:
+      - ./conf:/app/conf
+      - ./data:/app/data
+      - ./reports:/app/reports
+    networks:
+      overlay_network:
+        ipv4_address: "10.5.0.4"  # Static IP for run_simulator
+    container_name: run_simulator
+
+
+  # Container for storing simulation reports (using busybox image)
+  reports:
+    image: one_sim_reports:latest  # Image for the reports storage container
+    build:
+      context: .
+      dockerfile: dockerSetup/Dockerfile.reports  # Build image from Dockerfile
+    networks:
+      overlay_network:
+        ipv4_address: "10.5.0.5"  # Static IP for reports_storage
+    container_name: reports_storage
+
+networks:
+  overlay_network:
+    driver: overlay
+    ipam:
+      config:
+        - subnet: "10.5.0.0/24"  # Define a subnet for the overlay network
+
+volumes:
+  conf_volume:
+    driver: local
+  data_volume:
+    driver: local
+  reports_volume:
+    driver: local

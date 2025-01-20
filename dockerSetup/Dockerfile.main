@@ -1,0 +1,16 @@
+# Start with an appropriate base image for communication
+FROM openjdk:8-jre-slim as main_container
+
+# Set working directory
+WORKDIR /app
+
+# Copy necessary files
+COPY ./conf /app/conf
+COPY ./data /app/data
+COPY ./reports /app/reports
+
+# Expose the port
+EXPOSE 8080
+
+# Default command (Assuming the main container runs a service or web server)
+CMD ["java"]

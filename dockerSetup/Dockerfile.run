@@ -1,0 +1,16 @@
+# Start with the base image for runtime (openjdk for running the simulator)
+FROM openjdk:8-jre-slim as run_simulator
+
+# Set working directory
+WORKDIR /app
+
+# Copy the compiled application and necessary files from the build stage
+COPY --from=build_simulator /app/out /app/out
+COPY --from=build_simulator /app/lib /app/lib
+COPY --from=build_simulator /app/scripts /app/scripts
+COPY ./conf /app/conf
+COPY ./data /app/data
+COPY ./reports /app/reports
+
+# Set a default command that keeps the container running in an idle state
+CMD ["tail", "-f", "/dev/null"]
