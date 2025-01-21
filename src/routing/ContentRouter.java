@@ -10,12 +10,7 @@ package routing;
 
 import core.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import routing.community.Duration;
 
@@ -47,21 +42,24 @@ public class ContentRouter extends ActiveRouter {
             makeRoomForMessage(msg.getSize());
 
             msg.setTtl(this.msgTtl);
-            // add topic to message
-            List<Boolean> topic = new ArrayList<>();
-            int i = 0;
+            Map<Integer, List<Boolean>> topic = new HashMap<>();  // Initialize the topic map
+            List<Boolean> topicList = new ArrayList<>();  // Create a list to store topic values
 
-            while (i < 5) {
-                topic.add(Math.random() < 0.5);
+            int i = 0;
+            while (i < 5) {  // Limit the size to 10
+                topicList.add(Math.random() < 0.5);  // Add random boolean value
                 i++;
             }
+            int subTopic = new Random().nextInt(10);
+            topic.put(subTopic, topicList);  // Put the list into the map
+
             msg.addProperty(MESSAGE_TOPICS_S, topic);
-            System.out.println(this.getHost() + " created new message with topics : " + topic);
 
             return super.createNewMessage(msg);
         }
         return false;
     }
+
 
 
     @Override

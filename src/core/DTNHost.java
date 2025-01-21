@@ -1,10 +1,11 @@
-/* 
+/*
  * Copyright 2010 Aalto University, ComNet
- * Released under GPLv3. See LICENSE.txt for details. 
+ * Released under GPLv3. See LICENSE.txt for details.
  */
 package core;
 
 import java.util.*;
+
 import movement.MovementModel;
 import movement.Path;
 import routing.MessageRouter;
@@ -19,8 +20,8 @@ public class DTNHost implements Comparable<DTNHost> {
     private static int nextAddress = 0;
     private int address;
 
-    private Coord location; 	// where is the host
-    private Coord destination;	// where is it going
+    private Coord location;    // where is the host
+    private Coord destination;    // where is it going
 
     private MessageRouter router;
     private MovementModel movement;
@@ -36,7 +37,7 @@ public class DTNHost implements Comparable<DTNHost> {
     // tambahan testing
     public List<Duration> intervals;
     public List<Double> congestionRatio = new ArrayList<Double>();
-	public List<Double> dataInContact = new ArrayList<Double>();
+    public List<Double> dataInContact = new ArrayList<Double>();
     public List<Double> ema = new ArrayList<Double>();
     public List<Double> dummyForReward = new ArrayList<Double>();
 
@@ -53,10 +54,12 @@ public class DTNHost implements Comparable<DTNHost> {
     private boolean isPublisher = false;
     private boolean isBroker = false;
     private boolean isSubscriber = false;
+    private boolean isKDC = false; // kdc is key distributed center for key management of content publisher
 
     private List<Double> interest;
     private List<Boolean> ownInterest;
-        
+    private List<Integer> numericAtribute;
+
     static {
         DTNSim.registerForReset(DTNHost.class.getCanonicalName());
         reset();
@@ -65,19 +68,19 @@ public class DTNHost implements Comparable<DTNHost> {
     /**
      * Creates a new DTNHost.
      *
-     * @param msgLs Message listeners
-     * @param movLs Movement listeners
-     * @param groupId GroupID of this host
-     * @param interf List of NetworkInterfaces for the class
-     * @param comBus Module communication bus object
-     * @param mmProto Prototype of the movement model of this host
+     * @param msgLs        Message listeners
+     * @param movLs        Movement listeners
+     * @param groupId      GroupID of this host
+     * @param interf       List of NetworkInterfaces for the class
+     * @param comBus       Module communication bus object
+     * @param mmProto      Prototype of the movement model of this host
      * @param mRouterProto Prototype of the message router of this host
      */
     public DTNHost(List<MessageListener> msgLs,
-            List<MovementListener> movLs,
-            String groupId, List<NetworkInterface> interf,
-            ModuleCommunicationBus comBus,
-            MovementModel mmProto, MessageRouter mRouterProto) {
+                   List<MovementListener> movLs,
+                   String groupId, List<NetworkInterface> interf,
+                   ModuleCommunicationBus comBus,
+                   MovementModel mmProto, MessageRouter mRouterProto) {
         this.comBus = comBus;
         this.location = new Coord(0, 0);
         this.address = getNextAddress();
@@ -99,6 +102,9 @@ public class DTNHost implements Comparable<DTNHost> {
         } else if (groupId.startsWith("B")) {
             isBroker = true;
             name = "Broker_" + groupId + "_" + address;
+        } else if (groupId.startsWith("K")) {
+            isKDC = true;
+            name = "KDC_" + groupId + "_" + address;
         } else {
             // Jika GroupID tidak sesuai dengan peran yang ditentukan
             throw new IllegalArgumentException("Invalid GroupID: " + groupId);
@@ -109,19 +115,30 @@ public class DTNHost implements Comparable<DTNHost> {
             Random random = new Random();
             ownInterest = new ArrayList<Boolean>();
             interest = new ArrayList<Double>();
+            numericAtribute = new ArrayList<Integer>();
 
-            // just set random value for interest subsriber
-            int numInterest = 1 +random.nextInt(5);
+            // just set random value
+            int index = 0;
 
-            // looping for the interest
-            while (numInterest > 0) {
-                double interestValue = random.nextDouble();
-                interest.add(interestValue);
-                ownInterest.add(true);
-                numInterest--;
+            // looping
+            while (index < 5) { // 5 is the interest topic
+
+                // if the interest is 0.5 then used ownInterest
+                if (random.nextDouble() < 0.5) {
+                    interest.add(0.5);
+                    //add numericAtribute but only lest than 10
+                    numericAtribute.add(random.nextInt(10));
+                    ownInterest.add(true);
+                } else {
+                    interest.add(0.0);
+                    numericAtribute.add(0);
+                    ownInterest.add(false);
+
+                }
+                index++;
             }
 
-        }       
+        }
 
         for (NetworkInterface i : interf) {
             NetworkInterface ni = i.replicate();
@@ -162,6 +179,7 @@ public class DTNHost implements Comparable<DTNHost> {
         // this.ema = new ArrayList<Double>();
         // this.ema.add(0.0);
     }
+
     /**
      * Returns a new network interface address and increments the address for
      * subsequent calls.
@@ -370,7 +388,7 @@ public class DTNHost implements Comparable<DTNHost> {
      * Force a connection event
      */
     public void forceConnection(DTNHost anotherHost, String interfaceId,
-            boolean up) {
+                                boolean up) {
         NetworkInterface ni;
         NetworkInterface no;
 
@@ -401,7 +419,7 @@ public class DTNHost implements Comparable<DTNHost> {
     public void connect(DTNHost h) {
         System.err.println(
                 "WARNING: using deprecated DTNHost.connect(DTNHost)"
-                + "\n Use DTNHost.forceConnection(DTNHost,null,true) instead");
+                        + "\n Use DTNHost.forceConnection(DTNHost,null,true) instead");
         forceConnection(h, null, true);
     }
 
@@ -507,7 +525,7 @@ public class DTNHost implements Comparable<DTNHost> {
     /**
      * Start receiving a message from another host
      *
-     * @param m The message
+     * @param m    The message
      * @param from Who the message is from
      * @return The value returned by
      * {@link MessageRouter#receiveMessage(Message, DTNHost)}
@@ -516,7 +534,7 @@ public class DTNHost implements Comparable<DTNHost> {
         int retVal = this.router.receiveMessage(m, from);
 
         if (retVal == MessageRouter.RCV_OK) {
-            m.addNodeOnPath(this);	// add this node on the messages path
+            m.addNodeOnPath(this);    // add this node on the messages path
         }
 
         return retVal;
@@ -536,7 +554,7 @@ public class DTNHost implements Comparable<DTNHost> {
     /**
      * Informs the host that a message was successfully transferred.
      *
-     * @param id Identifier of the message
+     * @param id   Identifier of the message
      * @param from From who the message was from
      */
     public void messageTransferred(String id, DTNHost from) {
@@ -546,10 +564,10 @@ public class DTNHost implements Comparable<DTNHost> {
     /**
      * Informs the host that a message transfer was aborted.
      *
-     * @param id Identifier of the message
-     * @param from From who the message was from
+     * @param id             Identifier of the message
+     * @param from           From who the message was from
      * @param bytesRemaining Nrof bytes that were left before the transfer would
-     * have been ready; or -1 if the number of bytes is not known
+     *                       have been ready; or -1 if the number of bytes is not known
      */
     public void messageAborted(String id, DTNHost from, int bytesRemaining) {
         this.router.messageAborted(id, from, bytesRemaining);
@@ -567,11 +585,11 @@ public class DTNHost implements Comparable<DTNHost> {
     /**
      * Deletes a message from this host
      *
-     * @param id Identifier of the message
+     * @param id   Identifier of the message
      * @param drop True if the message is deleted because of "dropping" (e.g.
-     * buffer is full) or false if it was deleted for some other reason (e.g.
-     * the message got delivered to final destination). This effects the way the
-     * removing is reported to the message listeners.
+     *             buffer is full) or false if it was deleted for some other reason (e.g.
+     *             the message got delivered to final destination). This effects the way the
+     *             removing is reported to the message listeners.
      */
     public void deleteMessage(String id, boolean drop) {
         this.router.deleteMessage(id, drop);
@@ -627,28 +645,36 @@ public class DTNHost implements Comparable<DTNHost> {
         return cek.toString();
     }
 
-    // identified the publish, broker and subscriber
+    // identified the publish, broker, subscriber and KDC
     public boolean isPublisher() {
         return this.isPublisher;
     }
+
     public boolean isBroker() {
         return this.isBroker;
 
     }
+
     public boolean isSubscriber() {
         return this.isSubscriber;
+    }
+
+    public boolean isKDC() {
+        return this.isKDC;
     }
 
     public List<Double> getInterest() {
         return interest;
     }
-    public void setInterest(List<Double> newInterest) {
-        interest = newInterest;
-    }
+
+
     public List<Boolean> getOwnInterest() {
         return ownInterest;
     }
 
+    public List<Integer> getNumericAtribute() {
+        return numericAtribute;
+    }
 
 
 }
