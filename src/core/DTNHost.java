@@ -124,7 +124,7 @@ public class DTNHost implements Comparable<DTNHost> {
             while (index < 5) { // 5 is the interest topic
 
                 // if the interest is 0.5 then used ownInterest
-                if (random.nextDouble() < 0.5) {
+                if (random.nextDouble() < 0.5) { // 0.5 value index to set true for own interest
                     interest.add(0.5);
                     //add numericAtribute but only lest than 10
                     numericAtribute.add(random.nextInt(10));

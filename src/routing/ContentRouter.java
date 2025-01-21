@@ -13,6 +13,7 @@ import core.*;
 import java.util.*;
 
 import routing.community.Duration;
+import routing.util.TupleDe;
 
 public class ContentRouter extends ActiveRouter {
 
@@ -21,6 +22,9 @@ public class ContentRouter extends ActiveRouter {
 
     protected Map<DTNHost, Double> startTimestamps;
     protected Map<DTNHost, List<Duration>> connHistory;
+
+    protected Map<Integer, List<TupleDe<List<Boolean>, String>>> registeredTopics = new HashMap<>();
+
 
     public ContentRouter(Settings s) {
         super(s);
@@ -42,24 +46,30 @@ public class ContentRouter extends ActiveRouter {
             makeRoomForMessage(msg.getSize());
 
             msg.setTtl(this.msgTtl);
-            Map<Integer, List<Boolean>> topic = new HashMap<>();  // Initialize the topic map
+            Map<Integer, TupleDe<List<Boolean>, String>> topic = new HashMap<>();  // Initialize the topic map
             List<Boolean> topicList = new ArrayList<>();  // Create a list to store topic values
 
             int i = 0;
-            while (i < 5) {  // Limit the size to 10
-                topicList.add(Math.random() < 0.5);  // Add random boolean value
+            while (i < 5) {  // Limit the size to 5 for topics
+                topicList.add(Math.random() < 0.5);  // Add random boolean value for topic
                 i++;
             }
-            int subTopic = new Random().nextInt(10);
-            topic.put(subTopic, topicList);  // Put the list into the map
+            int subTopic = new Random().nextInt(10);  // Generate a random sub-topic
 
+            // Create a TupleDe to store topic list and associated publisher ID
+            String publisherId = String.valueOf(getHost().getRouter().getHost());  // Assuming the host's ID can represent the publisher's ID
+            TupleDe<List<Boolean>, String> tuple = new TupleDe<>(topicList, publisherId);
+
+            // Put the tuple in the topic map
+            topic.put(subTopic, tuple);
+
+            // Add the topic map to the message properties
             msg.addProperty(MESSAGE_TOPICS_S, topic);
 
-            return super.createNewMessage(msg);
+            return super.createNewMessage(msg);  // Call the superclass method to handle the message creation
         }
-        return false;
+        return false;  // Return false if the host is not a publisher
     }
-
 
 
     @Override
@@ -88,24 +98,6 @@ public class ContentRouter extends ActiveRouter {
                 startTimestamps.remove(peer);
             }
         }
-        // }
-    }
-
-    @Override
-    public void update() {
-        super.update();
-
-        if (isTransferring() || !canStartTransfer()) {
-            return; // transferring, don't try other connections yet
-        }
-
-        // Try first the messages that can be delivered to final recipient
-        if (exchangeDeliverableMessages() != null) {
-            return; // started a transfer, don't try others (yet)
-        }
-
-        // then try any/all message to any/all connection
-        this.tryAllMessagesToAllConnections();
     }
 
     @Override
@@ -133,38 +125,55 @@ public class ContentRouter extends ActiveRouter {
         // Specify the final message after processing
         Message aMessage = (outgoing == null) ? incoming : outgoing;
 
+        boolean isKDC = getHost().isKDC(); // Checking if this host is a KDC
         boolean isBroker = getHost().isBroker(); // Checking if this host is a broker
+        boolean isSubscriber = getHost().isSubscriber();
         boolean isFinalRecipient = isFinalDest(aMessage, getHost());
         boolean isFirstDelivery = isFinalRecipient && !isDeliveredMessage(aMessage);
-
+        List<DTNHost> allHost = SimScenario.getInstance().getHosts();
         // If not a broker and not an end recipient, add to the outbound buffer
         if (!isBroker && !isFinalRecipient) {
             addToMessages(aMessage, false);
         }
 
+        // Jika host adalah Publisher
         if (getHost().isPublisher()) {
-            System.out.println("publisher");
-            // if host is pubs, send it to broker
-            List<DTNHost> allHost = SimScenario.getInstance().getHosts();
+            System.out.println("Publisher");
+
+            // Kirimkan pesan ke Broker
+
             for (DTNHost broker : allHost) {
                 if (broker.isBroker() && broker.getRouter() instanceof ContentRouter) {
                     ContentRouter brokerRouter = (ContentRouter) broker.getRouter();
+
+                    // Kirimkan pesan ke Broker untuk memverifikasi topik dan subtopik
                     brokerRouter.addToMessages(aMessage, false);
-                    System.out.println(this.getHost() + "send msg to broker : " + broker);
                 }
             }
+
         } else if (isBroker) {
-            // if the host is a broker, send it to the subscriber with the same interest
-            List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
-            for (DTNHost subscriber : allHosts) {
-                if (subscriber.isSubscriber() && subscriber.getRouter() instanceof ContentRouter) {
-                    ContentRouter subscriberRouter = (ContentRouter) subscriber.getRouter();
-                    if (isSameInterest(aMessage, subscriber)) {
-                        subscriberRouter.addToMessages(aMessage, false);
-                        System.out.println(this.getHost() + " sent message to subscriber: " + subscriber);
+            // if the host is a broker, send it to the KDC to register the topic first
+            for (DTNHost KDC : allHost) {
+                if (KDC.isKDC() && KDC.getRouter() instanceof ContentRouter) {
+                    ContentRouter KDCRouter = (ContentRouter) KDC.getRouter();
+                    if (RegisterTopic(aMessage, KDC)) {
+                            KDCRouter.addToMessages(aMessage, false);
                     }
                 }
+                continue;
             }
+        } else if (isKDC) {
+            // if the host is a KDC, first if it get the interest from subscriber with topic and sub topic it will check from the register topic if its have KDC will building NAKT Tree
+            for (DTNHost subscriber : allHost) {
+                if (subscriber.isSubscriber() && subscriber.getRouter() instanceof ContentRouter) {
+                    ContentRouter subscriberRouter = (ContentRouter) subscriber.getRouter();
+
+                }
+            }
+
+
+        } else if (isSubscriber) {
+
         }
 
         if (isFirstDelivery) {
@@ -177,6 +186,43 @@ public class ContentRouter extends ActiveRouter {
         }
         return aMessage;
     }
+
+    protected boolean RegisterTopic(Message m, DTNHost host) {
+        // Extract the topic information from the message
+        Map<Integer, List<TupleDe<List<Boolean>, String>>> topicMap =
+                (Map<Integer, List<TupleDe<List<Boolean>, String>>>) m.getProperty(MESSAGE_TOPICS_S);
+
+        // Iterate over each sub-topic in the map
+        for (Map.Entry<Integer, List<TupleDe<List<Boolean>, String>>> entry : topicMap.entrySet()) {
+            Integer subTopic = entry.getKey();
+            List<TupleDe<List<Boolean>, String>> topicData = entry.getValue();
+
+            // Iterate over each topic entry and register it
+            for (TupleDe<List<Boolean>, String> tuple : topicData) {
+                List<Boolean> topicList = tuple.getFirst();  // Topic boolean values
+                String publisherId = tuple.getSecond();  // Publisher ID
+
+                // Log the registration process
+                System.out.println("Registering topic with SubTopic: " + subTopic + " for Publisher: " + publisherId);
+
+                // Check if the topic already exists in the map
+                if (!registeredTopics.containsKey(subTopic)) {
+                    // If not, create a new list for this subTopic
+                    registeredTopics.put(subTopic, new ArrayList<>());
+                }
+
+                // Append the new topic data (publisher and topic list) to the existing list for this subTopic
+                registeredTopics.get(subTopic).add(new TupleDe<>(topicList, publisherId));
+            }
+        }
+
+        // If all topics were successfully registered, return true
+        return true;
+    }
+
+
+
+
 
     private Boolean isFinalDest(Message m, DTNHost host) {
         // Get the topics from the message
@@ -281,6 +327,24 @@ public class ContentRouter extends ActiveRouter {
             }
         }
         return valInterest;
+    }
+
+
+    @Override
+    public void update() {
+        super.update();
+
+        if (isTransferring() || !canStartTransfer()) {
+            return; // transferring, don't try other connections yet
+        }
+
+        // Try first the messages that can be delivered to final recipient
+        if (exchangeDeliverableMessages() != null) {
+            return; // started a transfer, don't try others (yet)
+        }
+
+        // then try any/all message to any/all connection
+        this.tryAllMessagesToAllConnections();
     }
 
 
