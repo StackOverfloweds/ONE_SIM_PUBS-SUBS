@@ -1,0 +1,14 @@
+<component name="libraryTable">
+  <library name="lib">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/lib/uncommons-maths-1.2.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/ECLA.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/lombok.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/fastjson-1.2.7.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jFuzzyLogic.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/DTNConsoleConnection.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
