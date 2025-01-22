@@ -11,6 +11,7 @@ import movement.Path;
 import routing.MessageRouter;
 import routing.RoutingInfo;
 import routing.community.Duration;
+import routing.util.TupleDe;
 
 /**
  * A DTN capable host.
@@ -58,7 +59,8 @@ public class DTNHost implements Comparable<DTNHost> {
 
     private List<Double> interest;
     private List<Boolean> ownInterest;
-    private List<Integer> numericAtribute;
+    private List<TupleDe<Integer, Integer>> numericAtribute; //min max atribute value of int
+    private List<Integer> numericAtribute2;
 
     static {
         DTNSim.registerForReset(DTNHost.class.getCanonicalName());
@@ -115,7 +117,8 @@ public class DTNHost implements Comparable<DTNHost> {
             Random random = new Random();
             ownInterest = new ArrayList<Boolean>();
             interest = new ArrayList<Double>();
-            numericAtribute = new ArrayList<Integer>();
+            numericAtribute = new ArrayList<TupleDe<Integer, Integer>>(); // for sub topic with 2 value min max value
+            numericAtribute2 = new ArrayList<Integer>(); // for sub topic with 1 value
 
             // just set random value
             int index = 0;
@@ -126,14 +129,24 @@ public class DTNHost implements Comparable<DTNHost> {
                 // if the interest is 0.5 then used ownInterest
                 if (random.nextDouble() < 0.5) { // 0.5 value index to set true for own interest
                     interest.add(0.5);
-                    //add numericAtribute but only lest than 10
-                    numericAtribute.add(random.nextInt(10));
+
+                    // randomly choose to use numericAtribute for two values or one value
+                    if (random.nextBoolean()) {
+                        // Numeric attribute with two values (min, max)
+                        int min = random.nextInt(11); // Generate random min value between 0 and 10
+                        int max = random.nextInt(11 - min) + min; // Generate max value between min and 10
+                        numericAtribute.add(new TupleDe<>(min, max));
+                    } else {
+                        // Numeric attribute with one value
+                        numericAtribute2.add(random.nextInt(11)); // Generate a random value between 0 and 10
+                    }
+
                     ownInterest.add(true);
                 } else {
                     interest.add(0.0);
-                    numericAtribute.add(0);
+                    numericAtribute.add(new TupleDe<>(0, 0));
+                    numericAtribute2.add(null); // Add null for single value attribute
                     ownInterest.add(false);
-
                 }
                 index++;
             }
@@ -672,8 +685,12 @@ public class DTNHost implements Comparable<DTNHost> {
         return ownInterest;
     }
 
-    public List<Integer> getNumericAtribute() {
+    public List<TupleDe<Integer, Integer>> getNumericAtribute() {
         return numericAtribute;
+    }
+
+    public List<Integer> getNumericAtribute2() {
+        return numericAtribute2;
     }
 
 
