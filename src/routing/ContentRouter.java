@@ -10,6 +10,8 @@ package routing;
 
 import core.*;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
 import routing.community.Duration;
@@ -17,7 +19,7 @@ import routing.util.TupleDe;
 
 public class ContentRouter extends ActiveRouter {
 
-    // create some initial variable 
+    // create some initial variable
     public static final String MESSAGE_TOPICS_S = "topic";
 
     protected Map<DTNHost, Double> startTimestamps;
@@ -26,20 +28,10 @@ public class ContentRouter extends ActiveRouter {
     protected Map<Integer, List<TupleDe<List<Boolean>, String>>> registeredTopics;
     protected Map<Boolean, List<TupleDe<TupleDe<Integer, Integer>, String>>> subscribedTopics; //second tuple is for the numeric atribute and string is for flag
 
-
-    protected boolean isKDC = getHost().isKDC(); // Checking if this host is a KDC
-    protected boolean isBroker = getHost().isBroker(); // Checking if this host is a broker
-    protected boolean isSubscriber = getHost().isSubscriber();
-    protected boolean isPublisher = getHost().isPublisher();
-
-
     public ContentRouter(Settings s) {
         super(s);
         this.startTimestamps = new HashMap<DTNHost, Double>();
         this.connHistory = new HashMap<DTNHost, List<Duration>>();
-        this.registeredTopics = new HashMap<>();
-        this.subscribedTopics = new HashMap<>();
-
     }
 
     // Copy constructor
@@ -47,39 +39,162 @@ public class ContentRouter extends ActiveRouter {
         super(c);
         startTimestamps = c.startTimestamps;
         connHistory = c.connHistory;
-        registeredTopics = c.registeredTopics;
-        subscribedTopics = c.subscribedTopics;
     }
 
     @Override
     public boolean createNewMessage(Message msg) {
-        if (getHost().isPublisher()) {
-            makeRoomForMessage(msg.getSize());
+        if (getHost().isPublisher() || getHost().isBroker() || getHost().isKDC()) {
+            if (getHost().isPublisher()) {
+                makeRoomForMessage(msg.getSize());
 
-            msg.setTtl(this.msgTtl);
-            Map<Integer, TupleDe<List<Boolean>, String>> topic = new HashMap<>();  // Initialize the topic map
-            List<Boolean> topicList = new ArrayList<>();  // Create a list to store topic values
+                msg.setTtl(this.msgTtl);
+                Map<Integer, TupleDe<List<Boolean>, String>> topic = new HashMap<>();  // Initialize the topic map
+                List<Boolean> topicList = new ArrayList<>();  // Create a list to store topic values
 
-            int i = 0;
-            while (i < 5) {  // Limit the size to 5 for topics
-                topicList.add(Math.random() < 0.5);  // Add random boolean value for topic
-                i++;
+                int i = 0;
+                while (i < 5) {  // Limit the size to 5 for topics
+                    topicList.add(Math.random() < 0.5);  // Add random boolean value for topic
+                    i++;
+                }
+                int subTopic = new Random().nextInt(10);  // Generate a random sub-topic
+
+                // Create a TupleDe to store topic list and associated publisher ID
+                String publisherId = String.valueOf(getHost().getRouter().getHost());  // Assuming the host's ID can represent the publisher's ID
+                TupleDe<List<Boolean>, String> tuple = new TupleDe<>(topicList, publisherId);
+
+
+                // Put the tuple in the topic map
+                topic.put(subTopic, tuple);
+
+                //send it unRegisTopic to KDC to get the key hash for hashing the message throught broker
+                if (!topic.isEmpty()) {
+                    // register the topic
+                    try {
+                        msg.addProperty(MESSAGE_TOPICS_S, topic);
+
+                        if (sendToBrokerForRegistration(msg)) {
+                            return true;
+                        }
+                    } catch (NullPointerException e) {
+                        System.err.println("Error while processing topic registration: " + e.getMessage());
+                        e.printStackTrace();
+                        return false;
+                    }
+                }
             }
-            int subTopic = new Random().nextInt(10);  // Generate a random sub-topic
-
-            // Create a TupleDe to store topic list and associated publisher ID
-            String publisherId = String.valueOf(getHost().getRouter().getHost());  // Assuming the host's ID can represent the publisher's ID
-            TupleDe<List<Boolean>, String> tuple = new TupleDe<>(topicList, publisherId);
-
-            // Put the tuple in the topic map
-            topic.put(subTopic, tuple);
-
-            // Add the topic map to the message properties
-            msg.addProperty(MESSAGE_TOPICS_S, topic);
+            if (getHost().isBroker()) {
+                System.out.printf("host is broker %n");
+                if (sendToKDCForRegistration(msg)) {
+                    return true;
+                }
+            }
 
             return super.createNewMessage(msg);  // Call the superclass method to handle the message creation
         }
         return false;  // Return false if the host is not a publisher
+    }
+
+    private boolean sendToBrokerForRegistration(Message message) {
+        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
+
+        @SuppressWarnings("unchecked")
+        Map<Integer, TupleDe<List<Boolean>, String>> topicMap = new HashMap<>();
+        Map<Integer, ?> rawTopicMap = (Map<Integer, ?>) message.getProperty(MESSAGE_TOPICS_S);
+        if (rawTopicMap != null) {
+            for (Map.Entry<Integer, ?> entry : rawTopicMap.entrySet()) {
+                if (entry.getValue() instanceof TupleDe<?, ?>) {
+                    topicMap.put(entry.getKey(), (TupleDe<List<Boolean>, String>) entry.getValue());
+                } else {
+                    System.err.println("Invalid entry in the topic map for key: " + entry.getKey());
+                }
+            }
+        }
+
+        if (topicMap == null || topicMap.isEmpty()) {
+            System.err.println("No topics found in the message for registration.");
+            return false;
+        }
+
+        for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
+            TupleDe<List<Boolean>, String> tuple = entry.getValue();
+            if (tuple == null || tuple.getFirst() == null || tuple.getSecond() == null) {
+                System.err.println("Invalid tuple for topic " + entry.getKey());
+                return false; // Return false immediately if an invalid tuple is found
+            }
+        }
+
+        boolean brokerRegistered = false;
+
+        for (DTNHost broker : allHosts) {
+            if (broker.isBroker() && broker.getRouter() instanceof ContentRouter) {
+                ContentRouter brokerRouter = (ContentRouter) broker.getRouter();
+                System.out.println("Registering message on broker host: " + brokerRouter.getHost());
+                brokerRouter.addToMessages(message, false); // Assume addToMessages is used to store
+                brokerRegistered = true;
+            }
+        }
+
+        if (!brokerRegistered) {
+            System.err.println("No available broker to handle the registration.");
+            return false;
+        }
+
+        System.err.println("No available");
+        return false;
+    }
+
+    /**
+     * Method to send message to KDC for topic registration.
+     *
+     * @param message The message to be sent to KDC.
+     * @return True if the registration is successful, otherwise false.
+     */
+    private boolean sendToKDCForRegistration(Message message) {
+        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
+
+        @SuppressWarnings("unchecked")
+        Map<Integer, TupleDe<List<Boolean>, String>> topicMap = new HashMap<>();
+        Map<Integer, ?> rawTopicMap = (Map<Integer, ?>) message.getProperty(MESSAGE_TOPICS_S);
+        if (rawTopicMap != null) {
+            for (Map.Entry<Integer, ?> entry : rawTopicMap.entrySet()) {
+                if (entry.getValue() instanceof TupleDe<?, ?>) {
+                    topicMap.put(entry.getKey(), (TupleDe<List<Boolean>, String>) entry.getValue());
+                } else {
+                    System.err.println("Invalid entry in the topic map for key: " + entry.getKey());
+                }
+            }
+        }
+
+        if (topicMap == null || topicMap.isEmpty()) {
+            System.err.println("No topics found in the message for registration.");
+            return false;
+        }
+
+        for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
+            TupleDe<List<Boolean>, String> tuple = entry.getValue();
+            if (tuple == null || tuple.getFirst() == null || tuple.getSecond() == null) {
+                System.err.println("Invalid tuple for topic " + entry.getKey());
+                return false;
+            }
+        }
+
+        boolean kdcRegistered = false;
+
+        for (DTNHost kdc : allHosts) {
+            if (kdc.isKDC() && kdc.getRouter() instanceof ContentRouter) {
+                ContentRouter kdcRouter = (ContentRouter) kdc.getRouter();
+                System.out.println("Sending message to KDC host: " + kdcRouter.getHost());
+                kdcRouter.addToMessages(message, false); // Register message in KDC
+                kdcRegistered = true;
+            }
+        }
+
+        if (!kdcRegistered) {
+            System.err.println("No available KDC to handle the registration.");
+            return false;
+        }
+
+        return true;
     }
 
 
@@ -136,28 +251,21 @@ public class ContentRouter extends ActiveRouter {
         // message with no register
         Message messageNoRegis = (outgoing == null) ? incoming : outgoing;
         // Specify the final message after processing
-        Message publisherMessage = null;
-        Message subscriberMessage = null;
-
-        if (from.isPublisher()) {
-            publisherMessage = (outgoing == null) ? incoming : outgoing;
-        } else if (from.isSubscriber()) {
-            subscriberMessage = (outgoing == null) ? incoming : outgoing;
-        }
 
         Message aMessage = (outgoing == null) ? incoming : outgoing;
-
-        boolean isFinalRecipient = isFinalDest(aMessage, getHost());
-        boolean isFirstDelivery = isFinalRecipient && !isDeliveredMessage(aMessage);
+        boolean isKDC = getHost().isKDC(); // Checking if this host is a KDC
+        boolean isBroker = getHost().isBroker(); // Checking if this host is a broker
+        boolean isSubscriber = getHost().isSubscriber();
+        boolean isPublisher = getHost().isPublisher();
+//        boolean isFinalRecipient = isFinalDest(aMessage, getHost());
+//        boolean isFirstDelivery = isFinalRecipient && !isDeliveredMessage(aMessage);
         List<DTNHost> allHost = SimScenario.getInstance().getHosts();
 
-        // If not a broker and not an end recipient, add to the outbound buffer
-        if (!isBroker && !isFinalRecipient) {
-            addToMessages(aMessage, false);
-        }
+//        // If not a broker and not an end recipient, add to the outbound buffer
+//        if (!isBroker && !isFinalRecipient) {
+//            addToMessages(aMessage, false);
+//        }
         if (isPublisher) {
-            System.out.println("Publisher");
-
             for (DTNHost broker : allHost) {
                 if (broker.isBroker() && broker.getRouter() instanceof ContentRouter) {
                     ContentRouter brokerRouter = (ContentRouter) broker.getRouter();
@@ -176,10 +284,12 @@ public class ContentRouter extends ActiveRouter {
                     // Check if the message is from a publisher or subscriber
                     if (from.isPublisher()) {
                         //store to register the topic
-                        if (RegisterTopic(aMessage, KDC)) {
+                        if (RegisterTopic(aMessage)) {
                             KDCRouter.addToMessages(aMessage, false);
                         }
                     } else if (from.isSubscriber()) {
+                        // check msg is from subs
+                        System.out.println("Message propherty from subscriber : " + aMessage.getProperty(MESSAGE_TOPICS_S));
                         //subsriber subs for some topic
                         if (subscribeToTopic(aMessage, from, KDC)) {
                             KDCRouter.addToMessages(aMessage, false);
@@ -190,9 +300,12 @@ public class ContentRouter extends ActiveRouter {
         }
         if (isKDC) {
             // if the host is a KDC, first if it get the interest from subscriber with topic and sub topic it will check from the register topic if its have KDC will building NAKT Tree
-            for (DTNHost subscriber : allHost) {
-                if (subscriber.isSubscriber() && subscriber.getRouter() instanceof ContentRouter) {
-                    ContentRouter subscriberRouter = (ContentRouter) subscriber.getRouter();
+            for (DTNHost broker : allHost) {
+                if (broker.isSubscriber() && broker.getRouter() instanceof ContentRouter) {
+                    ContentRouter brokerRouter = (ContentRouter) broker.getRouter();
+                    if (from.isSubscriber()) {
+
+                    }
 
                 }
             }
@@ -203,26 +316,37 @@ public class ContentRouter extends ActiveRouter {
             for (DTNHost broker : allHost) {
                 if (broker.isBroker() && broker.getRouter() instanceof ContentRouter) {
                     ContentRouter brokerRouter = (ContentRouter) broker.getRouter();
-
-
+                    brokerRouter.addToMessages(aMessage, false);
                 }
             }
 
         }
 
-        if (isFirstDelivery) {
-            this.deliveredMessages.put(id, aMessage);
-        }
-
-        // broadcast all messages to all hosts
-        for (MessageListener ml : this.mListeners) {
-            ml.messageTransferred(aMessage, from, getHost(), isFirstDelivery);
-        }
+//        if (isFirstDelivery) {
+//            this.deliveredMessages.put(id, aMessage);
+//        }
+//
+//        // broadcast all messages to all hosts
+//        for (MessageListener ml : this.mListeners) {
+//            ml.messageTransferred(aMessage, from, getHost(), isFirstDelivery);
+//        }
         return aMessage;
     }
 
 
-    protected boolean RegisterTopic(Message m, DTNHost host) {
+    protected boolean isMessageFromPublisherOrSubscriber(Message msg, boolean isPublisherFlag) {
+        // Check if the message contains the expected flag for publisher or subscriber
+        Boolean messageFlag = (Boolean) msg.getProperty(MESSAGE_TOPICS_S);
+        if (messageFlag == null) {
+            System.out.println("Flag not found in the message.");
+            return false;
+        }
+        // Return true if the flag matches the expected type (publisher or subscriber)
+        return messageFlag.equals(isPublisherFlag);
+    }
+
+    // this metode only KDC
+    protected boolean RegisterTopic(Message m) {
         // Extract the topic information from the message
         Map<Integer, List<TupleDe<List<Boolean>, String>>> topicMap =
                 (Map<Integer, List<TupleDe<List<Boolean>, String>>>) m.getProperty(MESSAGE_TOPICS_S);
@@ -260,13 +384,11 @@ public class ContentRouter extends ActiveRouter {
             }
         }
 
-        // If registration was successful, log success
-        System.out.println("Topics successfully registered for host: " + host);
-
         // If all topics were successfully registered, return true
         return true;
     }
 
+    // this metode only KDC
     protected boolean subscribeToTopic(Message m, DTNHost subscriber, DTNHost KDC) {
         if (KDC == null || !KDC.isKDC()) {
             return false; // Return false if the provided KDC is invalid
@@ -384,10 +506,19 @@ public class ContentRouter extends ActiveRouter {
 
     protected boolean isSameInterest(Message m, DTNHost host) {
         // Get the topics from the message
-        @SuppressWarnings("unchecked") List<Boolean> topicMsg = (List<Boolean>) m.getProperty(MESSAGE_TOPICS_S);
+        @SuppressWarnings("unchecked")
+        List<Boolean> topicMsg;
+        try {
+            topicMsg = (List<Boolean>) m.getProperty(MESSAGE_TOPICS_S);
+        } catch (ClassCastException e) {
+            System.out.println("Error: MESSAGE_TOPICS_S property is not a List<Boolean>.");
+            return false;
+        }
+
         if (topicMsg == null) {
             return false;
         }
+
         // Get the host's interests
         List<Boolean> topicNode = host.getOwnInterest();
 
@@ -413,6 +544,7 @@ public class ContentRouter extends ActiveRouter {
 
 
     protected List<Double> countInterestTopic(Message m, DTNHost host) {
+        boolean isSubscriber = host.isSubscriber();
         if (m.getProperty(MESSAGE_TOPICS_S) == null) {
             return null;
         }
@@ -438,6 +570,7 @@ public class ContentRouter extends ActiveRouter {
 
     //metode to get the interest from the host and message
     protected List<TupleDe<Integer, Integer>> extractMinMaxValueSubs(Message m, DTNHost host) {
+        boolean isSubscriber = host.isSubscriber();
         if (m.getProperty(MESSAGE_TOPICS_S) == null) {
             return null;
         }
@@ -457,6 +590,31 @@ public class ContentRouter extends ActiveRouter {
             return minMaxValues;
         }
         return null;
+    }
+
+
+    // Utility class for hashing and encryption
+    static class HashingUtility {
+
+        public static String hash(String input) {
+            try {
+                MessageDigest md = MessageDigest.getInstance("SHA-256");
+                byte[] hashBytes = md.digest(input.getBytes());
+
+                StringBuilder sb = new StringBuilder();
+                for (byte b : hashBytes) {
+                    sb.append(String.format("%02x", b));
+                }
+                return sb.toString();
+            } catch (NoSuchAlgorithmException e) {
+                throw new RuntimeException("Hashing algorithm not found", e);
+            }
+        }
+
+        public static String encryptMessage(String hash, String message) {
+            // Simple encryption logic (for demonstration)
+            return hash + "|" + message;
+        }
     }
 
 
@@ -485,4 +643,3 @@ public class ContentRouter extends ActiveRouter {
 
 
 }
- 

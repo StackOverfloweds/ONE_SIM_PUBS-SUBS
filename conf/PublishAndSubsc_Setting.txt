@@ -63,11 +63,11 @@ Group.speed = 0.5, 1.5
 # Message TTL of 300 minutes (5 hours)
 Group.msgTtl = 300
 
-Group.nrofHosts = 40
+Group.nrofHosts = 60
 
 # group1 (pedestrians) specific settings - Publisher (P)
 Group1.groupID = P
-Group1.nrofHosts = 10  
+Group1.nrofHosts = 15
 Group1.movementModel = RandomWalk
 Group1.bufferSize = 10M
 Group1.waitTime = 0, 120
@@ -79,7 +79,7 @@ Group1.router = PublishAndSubscriberRouting
 
 # group2 specific settings - Broker (B)
 Group2.groupID = B
-Group2.nrofHosts = 5  
+Group2.nrofHosts = 10
 Group2.movementModel = RandomWalk
 Group2.bufferSize = 20M
 Group2.waitTime = 0, 60
@@ -91,7 +91,7 @@ Group2.router = PublishAndSubscriberRouting
 
 # group3 specific settings - Subscriber (S)
 Group3.groupID = S
-Group3.nrofHosts = 20  
+Group3.nrofHosts = 15
 Group3.movementModel = RandomWalk
 Group3.bufferSize = 5M
 Group3.waitTime = 0, 60
@@ -100,6 +100,18 @@ Group3.interface1 = btInterface
 Group3.nrofInterfaces = 1
 Group3.msgTtl = 300  
 Group3.router = PublishAndSubscriberRouting
+
+# group3 specific settings - KDC (K)
+Group4.groupID = K
+Group4.nrofHosts = 10
+Group4.movementModel = StationaryMovement
+Group4.bufferSize = 5M
+Group4.waitTime = 0, 60
+Group4.speed = 0.5, 1.5
+Group4.interface1 = btInterface
+Group4.nrofInterfaces = 1
+Group4.msgTtl = 300
+Group4.router = PublishAndSubscriberRouting
 
 
 ## Message creation parameters

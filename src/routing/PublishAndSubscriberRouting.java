@@ -75,8 +75,11 @@ public class PublishAndSubscriberRouting extends ContentRouter {
 
             // Collect the messages that can be transferred based on interest
             for (Message msg : msgCollection) {
-                if (isSameInterest(msg, other)) {
-                    messages.add(new Tuple<>(msg, con));
+                if (getHost().isSubscriber()) {
+                    System.out.printf("Subscriber message: %s"+"%n", msg.toString());
+                    if (isSameInterest(msg, other)) {
+                        messages.add(new Tuple<>(msg, con));
+                    }
                 }
             }
         }
