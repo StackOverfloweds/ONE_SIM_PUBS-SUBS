@@ -3,7 +3,7 @@
 #
 
 ## Scenario settings
-Scenario.name = default_scenario
+Scenario.name = PUBS_SUBS
 Scenario.simulateConnections = true
 Scenario.updateInterval = 0.1
 # 43200s == 12h
@@ -28,7 +28,7 @@ highspeedInterface.transmitSpeed = 10M
 highspeedInterface.transmitRange = 1000
 
 # Define 6 different node groups
-Scenario.nrofHostGroups = 3
+Scenario.nrofHostGroups = 4
 
 ## Group-specific settings:
 # groupID : Group's identifier. Used as the prefix of host names
@@ -98,13 +98,13 @@ Group3.waitTime = 0, 60
 Group3.speed = 0.5, 1.5
 Group3.interface1 = btInterface
 Group3.nrofInterfaces = 1
-Group3.msgTtl = 300  
+Group3.msgTtl = 300
 Group3.router = PublishAndSubscriberRouting
 
-# group3 specific settings - KDC (K)
+# group4 specific settings - KDC (K)
 Group4.groupID = K
 Group4.nrofHosts = 10
-Group4.movementModel = StationaryMovement
+Group4.movementModel = RandomStatic
 Group4.bufferSize = 5M
 Group4.waitTime = 0, 60
 Group4.speed = 0.5, 1.5
@@ -134,7 +134,7 @@ Events1.prefix = M
 # seed for movement models' pseudo random number generator (default = 0)
 MovementModel.rngSeed = 1
 # World's size for Movement Models without implicit size (width, height; meters)
-MovementModel.worldSize = 800, 750
+MovementModel.worldSize = 1050, 680
 # How long time to move hosts in the world before real simulation
 MovementModel.warmup = 1000
 
