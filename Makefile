@@ -6,7 +6,7 @@ build:
 
 # Run the application with specific arguments
 run: build
-	gradle run --args=" 1 ./conf/PublishAndSubsc_Setting.txt" --stacktrace
+	gradle run --args="-b 1 ./conf/PublishAndSubsc_Setting.txt" --stacktrace
 
 # Clean the project
 clean:

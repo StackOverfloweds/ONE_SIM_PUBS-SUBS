@@ -82,12 +82,6 @@ public class ContentRouter extends ActiveRouter {
                     }
                 }
             }
-            if (getHost().isBroker()) {
-                System.out.printf("host is broker %n");
-                if (sendToKDCForRegistration(msg)) {
-                    return true;
-                }
-            }
 
             return super.createNewMessage(msg);  // Call the superclass method to handle the message creation
         }
@@ -125,12 +119,16 @@ public class ContentRouter extends ActiveRouter {
 
         boolean brokerRegistered = false;
 
-        for (DTNHost broker : allHosts) {
-            if (broker.isBroker() && broker.getRouter() instanceof ContentRouter) {
-                ContentRouter brokerRouter = (ContentRouter) broker.getRouter();
-                System.out.println("Registering message on broker host: " + brokerRouter.getHost());
+        for (DTNHost getHost : allHosts) {
+            if (getHost.isBroker() && getHost.getRouter() instanceof ContentRouter) {
+                ContentRouter brokerRouter = (ContentRouter) getHost.getRouter();
+                System.out.println("Store to broker: " + brokerRouter.getHost());
                 brokerRouter.addToMessages(message, false); // Assume addToMessages is used to store
-                brokerRegistered = true;
+                //after send it to broker...the broker will bring to kdc to register the topic
+
+                if (forwardToKDC(message, brokerRouter.getHost())) {
+                    brokerRegistered = true;
+                }
             }
         }
 
@@ -143,15 +141,27 @@ public class ContentRouter extends ActiveRouter {
         return false;
     }
 
-    /**
-     * Method to send message to KDC for topic registration.
-     *
-     * @param message The message to be sent to KDC.
-     * @return True if the registration is successful, otherwise false.
-     */
-    private boolean sendToKDCForRegistration(Message message) {
+    private boolean forwardToKDC(Message message, DTNHost broker) {
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
 
+        for (DTNHost host : allHosts) {
+            if (host.isKDC() && host.getRouter() instanceof ContentRouter) {
+                ContentRouter kdcRouter = (ContentRouter) host.getRouter();
+                System.out.println("Forwarding to KDC: " + kdcRouter.getHost());
+
+                // Process the topic registration at the KDC
+                if (processTopicRegistrationAtKDC(message)) {
+                    // Clear the message after processing
+                    return true;
+                }
+            }
+        }
+
+        System.err.println("No available KDC to handle the registration.");
+        return false;
+    }
+
+    private boolean processTopicRegistrationAtKDC(Message message) {
         @SuppressWarnings("unchecked")
         Map<Integer, TupleDe<List<Boolean>, String>> topicMap = new HashMap<>();
         Map<Integer, ?> rawTopicMap = (Map<Integer, ?>) message.getProperty(MESSAGE_TOPICS_S);
@@ -174,28 +184,45 @@ public class ContentRouter extends ActiveRouter {
             TupleDe<List<Boolean>, String> tuple = entry.getValue();
             if (tuple == null || tuple.getFirst() == null || tuple.getSecond() == null) {
                 System.err.println("Invalid tuple for topic " + entry.getKey());
-                return false;
+                return false; // Return false immediately if an invalid tuple is found
             }
-        }
 
-        boolean kdcRegistered = false;
-
-        for (DTNHost kdc : allHosts) {
-            if (kdc.isKDC() && kdc.getRouter() instanceof ContentRouter) {
-                ContentRouter kdcRouter = (ContentRouter) kdc.getRouter();
-                System.out.println("Sending message to KDC host: " + kdcRouter.getHost());
-                kdcRouter.addToMessages(message, false); // Register message in KDC
-                kdcRegistered = true;
+            // Store the topic information in the registeredTopics map
+            if (registeredTopics == null) {
+                registeredTopics = new HashMap<>();
             }
+            if (!registeredTopics.containsKey(entry.getKey())) {
+                registeredTopics.put(entry.getKey(), new ArrayList<>());
+            }
+            registeredTopics.get(entry.getKey()).add(new TupleDe<>(tuple.getFirst(), tuple.getSecond()));
         }
-
-        if (!kdcRegistered) {
-            System.err.println("No available KDC to handle the registration.");
-            return false;
-        }
-
+        printRegisteredTopics();
         return true;
     }
+
+    public void printRegisteredTopics() {
+        if (registeredTopics == null || registeredTopics.isEmpty()) {
+            System.out.println("No topics have been registered yet.");
+            return;
+        }
+
+        System.out.println("Registered Topics:");
+        for (Map.Entry<Integer, List<TupleDe<List<Boolean>, String>>> entry : registeredTopics.entrySet()) {
+            int subTopic = entry.getKey();
+            List<TupleDe<List<Boolean>, String>> topicList = entry.getValue();
+
+            System.out.println("Sub-Topic: " + subTopic);
+            for (TupleDe<List<Boolean>, String> tuple : topicList) {
+                List<Boolean> topicValues = tuple.getFirst();
+                String publisherId = tuple.getSecond();
+
+                System.out.println("  Topic Values: " + topicValues);
+                System.out.println("  Publisher ID: " + publisherId);
+            }
+            System.out.println();
+        }
+    }
+
 
 
     @Override
@@ -279,23 +306,23 @@ public class ContentRouter extends ActiveRouter {
         if (isBroker) {
             // if the host is a broker, send it to the KDC to register the topic first
             for (DTNHost KDC : allHost) {
-                if (KDC.isKDC() && KDC.getRouter() instanceof ContentRouter) {
-                    ContentRouter KDCRouter = (ContentRouter) KDC.getRouter();
-                    // Check if the message is from a publisher or subscriber
-                    if (from.isPublisher()) {
-                        //store to register the topic
-                        if (RegisterTopic(aMessage)) {
-                            KDCRouter.addToMessages(aMessage, false);
-                        }
-                    } else if (from.isSubscriber()) {
-                        // check msg is from subs
-                        System.out.println("Message propherty from subscriber : " + aMessage.getProperty(MESSAGE_TOPICS_S));
-                        //subsriber subs for some topic
-                        if (subscribeToTopic(aMessage, from, KDC)) {
-                            KDCRouter.addToMessages(aMessage, false);
-                        }
-                    }
-                }
+//                if (KDC.isKDC() && KDC.getRouter() instanceof ContentRouter) {
+//                    ContentRouter KDCRouter = (ContentRouter) KDC.getRouter();
+//                    // Check if the message is from a publisher or subscriber
+//                    if (from.isPublisher()) {
+//                        //store to register the topic
+//                        if (RegisterTopic(aMessage)) {
+//                            KDCRouter.addToMessages(aMessage, false);
+//                        }
+//                    } else if (from.isSubscriber()) {
+//                        // check msg is from subs
+//                        System.out.println("Message propherty from subscriber : " + aMessage.getProperty(MESSAGE_TOPICS_S));
+//                        //subsriber subs for some topic
+//                        if (subscribeToTopic(aMessage, from, KDC)) {
+//                            KDCRouter.addToMessages(aMessage, false);
+//                        }
+//                    }
+//                }
             }
         }
         if (isKDC) {
