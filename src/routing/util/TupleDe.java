@@ -12,6 +12,7 @@ public class TupleDe<A, B> {
     public void setFirst(A first) {
         this.first = first;
     }
+    public void setSecond(B second) { this.second = second; }
 
     public A getFirst() {
         return first;
