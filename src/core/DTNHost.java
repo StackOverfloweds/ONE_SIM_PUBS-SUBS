@@ -681,7 +681,6 @@ public class DTNHost implements Comparable<DTNHost> {
         return interest;
     }
 
-
     public List<Boolean> getOwnInterest() {
         return ownInterest;
     }
