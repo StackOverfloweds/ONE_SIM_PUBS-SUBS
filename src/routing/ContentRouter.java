@@ -4,8 +4,6 @@
  * Copyright 2025 by Bryan (HaiPigGi-StackOverfloweds)
  *
  */
-
-
 package routing;
 
 import core.*;
@@ -58,24 +56,14 @@ public class ContentRouter extends ActiveRouter {
                 // Create a TupleDe to store topic list and associated publisher ID
                 String publisherId = String.valueOf(getHost().getRouter().getHost());  // Assuming the host's ID can represent the publisher's ID
                 TupleDe<List<Boolean>, String> tuple = new TupleDe<>(topicList, publisherId);
-//                System.out.printf("pubisherId: %s\n", publisherId);
 
                 // Put the tuple in the topic map
                 topic.put(subTopic, tuple);
 
-                //send it unRegisTopic to KDC to get the key hash for hashing the message throught broker
+                // Send the topic map to the broker for registration
                 if (!topic.isEmpty()) {
-                    // register the topic
-                    try {
-                        msg.addProperty(MESSAGE_TOPICS_S, topic);
-
-                        if (sendToBrokerForRegistration(msg)) {
-                            return true;
-                        }
-                    } catch (NullPointerException e) {
-                        System.err.println("Error while processing topic registration: " + e.getMessage());
-                        e.printStackTrace();
-                        return false;
+                    if (sendToBrokerForRegistration(topic)) {
+                        return true;
                     }
                 }
             }
@@ -159,27 +147,15 @@ public class ContentRouter extends ActiveRouter {
     }
 
 
-    private boolean sendToBrokerForRegistration(Message message) {
+    private boolean sendToBrokerForRegistration(Map<Integer, TupleDe<List<Boolean>, String>> topicMap) {
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
 
-        @SuppressWarnings("unchecked")
-        Map<Integer, TupleDe<List<Boolean>, String>> topicMap = new HashMap<>();
-        Map<Integer, ?> rawTopicMap = (Map<Integer, ?>) message.getProperty(MESSAGE_TOPICS_S);
-        if (rawTopicMap != null) {
-            for (Map.Entry<Integer, ?> entry : rawTopicMap.entrySet()) {
-                if (entry.getValue() instanceof TupleDe<?, ?>) {
-                    topicMap.put(entry.getKey(), (TupleDe<List<Boolean>, String>) entry.getValue());
-                } else {
-                    System.err.println("Invalid entry in the topic map for key: " + entry.getKey());
-                }
-            }
-        }
-
         if (topicMap == null || topicMap.isEmpty()) {
-            System.err.println("No topics found in the message for registration.");
+            System.err.println("No topics found in the map for registration.");
             return false;
         }
 
+        // Validate the topic map
         for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
             TupleDe<List<Boolean>, String> tuple = entry.getValue();
             if (tuple == null || tuple.getFirst() == null || tuple.getSecond() == null) {
@@ -190,123 +166,108 @@ public class ContentRouter extends ActiveRouter {
 
         boolean brokerRegistered = false;
 
-        for (DTNHost getHost : allHosts) {
-            if (getHost.isBroker() && getHost.getRouter() instanceof ContentRouter) {
-                ContentRouter brokerRouter = (ContentRouter) getHost.getRouter();
-//                System.out.println("Store to broker: " + brokerRouter.getHost());
-                brokerRouter.addToMessages(message, false); // Assume addToMessages is used to store
-                //after send it to broker...the broker will bring to kdc to register the topic
+        // Find the broker and forward the topic map
+        for (DTNHost host : allHosts) {
+            if (host.isBroker() && host.getRouter() instanceof ContentRouter) {
+                ContentRouter brokerRouter = (ContentRouter) host.getRouter();
 
-                if (forwardToKDC(message, brokerRouter.getHost())) {
+                // Forward the topic map to the broker
+                if (brokerRouter.addTopicRegistration(topicMap)) {
                     brokerRegistered = true;
+
+                    // Forward the topic map to the KDC
+                    if (forwardToKDC(topicMap, host)) {
+//                        System.out.println("Topic registration forwarded to KDC by broker: " + host);
+                    } else {
+//                        System.err.println("Failed to forward topic registration to KDC.");
+                    }
                 }
             }
         }
 
         if (!brokerRegistered) {
-            System.err.println("No available broker to handle the registration.");
+//            System.err.println("No available broker to handle the registration.");
+            return false;
+        }
+        return true;
+    }
+
+    public boolean addTopicRegistration(Map<Integer, TupleDe<List<Boolean>, String>> topicMap) {
+        if (topicMap == null || topicMap.isEmpty()) {
             return false;
         }
 
-        System.err.println("No available");
-        return false;
+        // Store the topic registration in the broker's registeredTopics map
+        if (registeredTopics == null) {
+            registeredTopics = new HashMap<>();
+        }
+
+        for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
+            int subTopic = entry.getKey();
+            TupleDe<List<Boolean>, String> tuple = entry.getValue();
+
+            if (!registeredTopics.containsKey(subTopic)) {
+                registeredTopics.put(subTopic, new ArrayList<>());
+            }
+            registeredTopics.get(subTopic).add(tuple);
+        }
+
+//        System.out.println("Topic registration added to broker: " + topicMap);
+        return true;
     }
 
-
-    protected boolean forwardToKDC(Message message, DTNHost broker) {
+    private boolean forwardToKDC(Map<Integer, TupleDe<List<Boolean>, String>> topicMap, DTNHost broker) {
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
 
+        // Find the KDC
         for (DTNHost host : allHosts) {
             if (host.isKDC() && host.getRouter() instanceof ContentRouter) {
-//                ContentRouter kdcRouter = (ContentRouter) host.getRouter();
-//                System.out.println("Forwarding to KDC: " + kdcRouter.getHost());
+                ContentRouter kdcRouter = (ContentRouter) host.getRouter();
 
-                // Process the topic registration at the KDC
-                if (processTopicRegistrationAtKDC(message)) {
-                    // Clear the message after processing
+                // Forward the topic map to the KDC
+                if (kdcRouter.processTopicRegistrationAtKDC(topicMap)) {
+//                    System.out.println("Topic registration forwarded to KDC: " + host);
                     return true;
-                } else { //if its want to subscribe topic
-
                 }
             }
         }
 
-        System.err.println("No available KDC to handle the registration.");
+//        System.err.println("No available KDC to handle the registration.");
         return false;
     }
 
-    private boolean processTopicRegistrationAtKDC(Message message) {
-        @SuppressWarnings("unchecked")
-        Map<Integer, TupleDe<List<Boolean>, String>> topicMap = new HashMap<>();
-        Map<Integer, ?> rawTopicMap = (Map<Integer, ?>) message.getProperty(MESSAGE_TOPICS_S);
-        if (rawTopicMap != null) {
-            for (Map.Entry<Integer, ?> entry : rawTopicMap.entrySet()) {
-                if (entry.getValue() instanceof TupleDe<?, ?>) {
-                    topicMap.put(entry.getKey(), (TupleDe<List<Boolean>, String>) entry.getValue());
-                } else {
-                    System.err.println("Invalid entry in the topic map for key: " + entry.getKey());
-                    return false;
-                }
-            }
-        }
-
+    private boolean processTopicRegistrationAtKDC(Map<Integer, TupleDe<List<Boolean>, String>> topicMap) {
         if (topicMap == null || topicMap.isEmpty()) {
-            System.err.println("No topics found in the message for registration.");
+            System.err.println("No topics found in the map for registration.");
             return false;
         }
 
+        // Validate the topic map
         for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
             TupleDe<List<Boolean>, String> tuple = entry.getValue();
             if (tuple == null || tuple.getFirst() == null || tuple.getSecond() == null) {
                 System.err.println("Invalid tuple for topic " + entry.getKey());
                 return false; // Return false immediately if an invalid tuple is found
             }
-
-            // Store the topic information in the registeredTopics map
-            if (registeredTopics == null) {
-                registeredTopics = new HashMap<>();
-            }
-            if (!registeredTopics.containsKey(entry.getKey())) {
-                registeredTopics.put(entry.getKey(), new ArrayList<>());
-            }
-            registeredTopics.get(entry.getKey()).add(new TupleDe<>(tuple.getFirst(), tuple.getSecond()));
         }
-//        printRegisteredTopics();
+
+        // Store the topic information in the registeredTopics map
+        if (registeredTopics == null) {
+            registeredTopics = new HashMap<>();
+        }
+
+        for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
+            int subTopic = entry.getKey();
+            TupleDe<List<Boolean>, String> tuple = entry.getValue();
+
+            if (!registeredTopics.containsKey(subTopic)) {
+                registeredTopics.put(subTopic, new ArrayList<>());
+            }
+            registeredTopics.get(subTopic).add(tuple);
+        }
+
+//        System.out.println("Topic registration processed at KDC: " + topicMap);
         return true;
-    }
-
-//    public void printRegisteredTopics() {
-//        if (registeredTopics == null || registeredTopics.isEmpty()) {
-//            System.out.println("No topics have been registered yet.");
-//            return;
-//        }
-//
-//        System.out.println("Registered Topics:");
-//        for (Map.Entry<Integer, List<TupleDe<List<Boolean>, String>>> entry : registeredTopics.entrySet()) {
-//            int subTopic = entry.getKey();
-//            List<TupleDe<List<Boolean>, String>> topicList = entry.getValue();
-//
-//            System.out.println("Sub-Topic: " + subTopic);
-//            for (TupleDe<List<Boolean>, String> tuple : topicList) {
-//                List<Boolean> topicValues = tuple.getFirst();
-//                String publisherId = tuple.getSecond();
-//
-//                System.out.println("  Topic Values: " + topicValues);
-//                System.out.println("  Publisher ID: " + publisherId);
-//            }
-//            System.out.println();
-//        }
-//    }
-
-    protected DTNHost findBroker () {
-        for (Connection c : getConnections()) {
-            DTNHost broker = c.getOtherNode(getHost());
-            if (broker != null && broker.isBroker()) {
-                return broker;
-
-            }
-        }
-        return null;
     }
 
 
@@ -386,6 +347,7 @@ public class ContentRouter extends ActiveRouter {
                     topicMap.put(entry.getKey(), (List<TupleDe<Integer, Integer>>) entry.getValue());
                 } else {
                     System.err.println("Invalid entry in the subscription map for key: " + entry.getKey());
+                    return false;
                 }
             }
         }
@@ -496,6 +458,13 @@ public class ContentRouter extends ActiveRouter {
         // then try any/all message to any/all connection
         this.tryAllMessagesToAllConnections();
     }
+
+    public Map<Integer, List<TupleDe<List<Boolean>, String>>> getRegisteredTopics() {
+        return registeredTopics;
+    }
+
+
+
 
 
     @Override
