@@ -1,3 +1,5 @@
 # Ignore IntelliJ IDEA project files
 .idea/
 reports/
+./.gradle
+build/

@@ -55,8 +55,8 @@ public class DTNHost implements Comparable<DTNHost> {
     private boolean isPublisher = false;
     private boolean isBroker = false;
     private boolean isSubscriber = false;
-    private boolean isKDC = false; // kdc is key distributed center for key management of content publisher
-
+    private boolean isKDC = false;
+    // kdc is key distributed center for key management of content publisher
     private List<Double> interest;
     private List<Boolean> ownInterest;
     private List<TupleDe<Integer, Integer>> numericAtribute; //min max atribute value of int
@@ -92,6 +92,7 @@ public class DTNHost implements Comparable<DTNHost> {
         this.isPublisher = false;
         this.isSubscriber = false;
         this.isBroker = false;
+        this.isKDC = false;
 
         // create role for pubs-subs with group
 
@@ -679,7 +680,6 @@ public class DTNHost implements Comparable<DTNHost> {
     public List<Double> getInterest() {
         return interest;
     }
-
 
     public List<Boolean> getOwnInterest() {
         return ownInterest;
