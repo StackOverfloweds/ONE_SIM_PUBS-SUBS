@@ -21,7 +21,7 @@ public class ContentRouter extends ActiveRouter {
     protected Map<DTNHost, Double> startTimestamps;
     protected Map<DTNHost, List<Duration>> connHistory;
 
-    protected Map<Integer, List<TupleDe<List<Boolean>, String>>> registeredTopics;
+    protected Map<Integer, List<TupleDe<Boolean, String>>> registeredTopics;
 
     public ContentRouter(Settings s) {
         super(s);
@@ -38,24 +38,20 @@ public class ContentRouter extends ActiveRouter {
 
     @Override
     public boolean createNewMessage(Message msg) {
-        if (getHost().isPublisher() || getHost().isBroker() || getHost().isKDC()) {
             if (getHost().isPublisher()) {
                 makeRoomForMessage(msg.getSize());
 
                 msg.setTtl(this.msgTtl);
-                Map<Integer, TupleDe<List<Boolean>, String>> topic = new HashMap<>();  // Initialize the topic map
-                List<Boolean> topicList = new ArrayList<>();  // Create a list to store topic values
+                Map<Integer, TupleDe<Boolean, String>> topic = new HashMap<>();  // Initialize the topic map
 
-                int i = 0;
-                while (i < 5) {  // Limit the size to 5 for topics
-                    topicList.add(Math.random() < 0.5);  // Add random boolean value for topic
-                    i++;
-                }
-                int subTopic = new Random().nextInt(10);  // Generate a random sub-topic
+                //create random boolean value
+                boolean topicValue = Math.random()< 0.5; //generate random topic
+
+                int subTopic = new Random().nextInt(30);  // Generate a random sub-topic
 
                 // Create a TupleDe to store topic list and associated publisher ID
-                String publisherId = String.valueOf(getHost().getRouter().getHost());  // Assuming the host's ID can represent the publisher's ID
-                TupleDe<List<Boolean>, String> tuple = new TupleDe<>(topicList, publisherId);
+                String publisherId = String.valueOf(getHost().getAddress());  // Assuming the host's ID can represent the publisher's ID
+                TupleDe<Boolean, String> tuple = new TupleDe<>(topicValue, publisherId);
 
                 // Put the tuple in the topic map
                 topic.put(subTopic, tuple);
@@ -66,10 +62,9 @@ public class ContentRouter extends ActiveRouter {
                         return true;
                     }
                 }
+            return super.createNewMessage(msg);  // Call the superclass method to handle the message creation
             }
 
-            return super.createNewMessage(msg);  // Call the superclass method to handle the message creation
-        }
         return false;  // Return false if the host is not a publisher
     }
 
@@ -147,7 +142,7 @@ public class ContentRouter extends ActiveRouter {
     }
 
 
-    private boolean sendToBrokerForRegistration(Map<Integer, TupleDe<List<Boolean>, String>> topicMap) {
+    private boolean sendToBrokerForRegistration(Map<Integer, TupleDe<Boolean, String>> topicMap) {
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
 
         if (topicMap == null || topicMap.isEmpty()) {
@@ -156,8 +151,8 @@ public class ContentRouter extends ActiveRouter {
         }
 
         // Validate the topic map
-        for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
-            TupleDe<List<Boolean>, String> tuple = entry.getValue();
+        for (Map.Entry<Integer, TupleDe<Boolean, String>> entry : topicMap.entrySet()) {
+            TupleDe<Boolean, String> tuple = entry.getValue();
             if (tuple == null || tuple.getFirst() == null || tuple.getSecond() == null) {
                 System.err.println("Invalid tuple for topic " + entry.getKey());
                 return false; // Return false immediately if an invalid tuple is found
@@ -174,7 +169,6 @@ public class ContentRouter extends ActiveRouter {
                 // Forward the topic map to the broker
                 if (brokerRouter.addTopicRegistration(topicMap)) {
                     brokerRegistered = true;
-
                     // Forward the topic map to the KDC
                     if (forwardToKDC(topicMap, host)) {
 //                        System.out.println("Topic registration forwarded to KDC by broker: " + host);
@@ -192,7 +186,7 @@ public class ContentRouter extends ActiveRouter {
         return true;
     }
 
-    public boolean addTopicRegistration(Map<Integer, TupleDe<List<Boolean>, String>> topicMap) {
+    public boolean addTopicRegistration(Map<Integer, TupleDe<Boolean, String>> topicMap) {
         if (topicMap == null || topicMap.isEmpty()) {
             return false;
         }
@@ -202,9 +196,9 @@ public class ContentRouter extends ActiveRouter {
             registeredTopics = new HashMap<>();
         }
 
-        for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
+        for (Map.Entry<Integer, TupleDe<Boolean, String>> entry : topicMap.entrySet()) {
             int subTopic = entry.getKey();
-            TupleDe<List<Boolean>, String> tuple = entry.getValue();
+            TupleDe<Boolean, String> tuple = entry.getValue();
 
             if (!registeredTopics.containsKey(subTopic)) {
                 registeredTopics.put(subTopic, new ArrayList<>());
@@ -216,7 +210,7 @@ public class ContentRouter extends ActiveRouter {
         return true;
     }
 
-    private boolean forwardToKDC(Map<Integer, TupleDe<List<Boolean>, String>> topicMap, DTNHost broker) {
+    private boolean forwardToKDC(Map<Integer, TupleDe<Boolean, String>> topicMap, DTNHost broker) {
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
 
         // Find the KDC
@@ -236,15 +230,15 @@ public class ContentRouter extends ActiveRouter {
         return false;
     }
 
-    private boolean processTopicRegistrationAtKDC(Map<Integer, TupleDe<List<Boolean>, String>> topicMap) {
+    private boolean processTopicRegistrationAtKDC(Map<Integer, TupleDe<Boolean, String>> topicMap) {
         if (topicMap == null || topicMap.isEmpty()) {
             System.err.println("No topics found in the map for registration.");
             return false;
         }
 
         // Validate the topic map
-        for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
-            TupleDe<List<Boolean>, String> tuple = entry.getValue();
+        for (Map.Entry<Integer, TupleDe<Boolean, String>> entry : topicMap.entrySet()) {
+            TupleDe<Boolean, String> tuple = entry.getValue();
             if (tuple == null || tuple.getFirst() == null || tuple.getSecond() == null) {
                 System.err.println("Invalid tuple for topic " + entry.getKey());
                 return false; // Return false immediately if an invalid tuple is found
@@ -256,14 +250,25 @@ public class ContentRouter extends ActiveRouter {
             registeredTopics = new HashMap<>();
         }
 
-        for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
+        for (Map.Entry<Integer, TupleDe<Boolean, String>> entry : topicMap.entrySet()) {
             int subTopic = entry.getKey();
-            TupleDe<List<Boolean>, String> tuple = entry.getValue();
+            TupleDe<Boolean, String> tuple = entry.getValue();
+//            System.out.println("get value pubs: " + tuple);
 
             if (!registeredTopics.containsKey(subTopic)) {
                 registeredTopics.put(subTopic, new ArrayList<>());
             }
-            registeredTopics.get(subTopic).add(tuple);
+            // checkking if the order in register is already exist
+            boolean isRegistered = registeredTopics.get(subTopic).stream().anyMatch(existingTuple -> existingTuple.getSecond().equals(tuple.getSecond()));
+
+            if (!isRegistered) {
+                registeredTopics.get(subTopic).add(tuple);
+//                System.out.println("Registered topic " + subTopic + " for " + tuple.getSecond());
+            } else {
+//                System.out.println("Already Registered Topic: " + subTopic + " -> " + tuple.getSecond());
+                return false;
+
+            }
         }
 
 //        System.out.println("Topic registration processed at KDC: " + topicMap);
@@ -459,8 +464,8 @@ public class ContentRouter extends ActiveRouter {
         this.tryAllMessagesToAllConnections();
     }
 
-    public Map<Integer, List<TupleDe<List<Boolean>, String>>> getRegisteredTopics() {
-        return registeredTopics;
+    protected Map<Integer, List<TupleDe<Boolean, String>>> getRegisteredTopics() {
+        return this.registeredTopics;
     }
 
 

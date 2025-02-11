@@ -1,5 +1,6 @@
 package routing;
 
+import com.sun.org.apache.xpath.internal.operations.Bool;
 import core.*;
 import routing.util.TupleDe;
 
@@ -7,7 +8,7 @@ import java.util.*;
 
 public class PublishAndSubscriberRouting extends ContentRouter {
 
-    protected Map<TupleDe<String, String>, List<TupleDe<Integer, Integer>>> subscribedTopics;
+    protected Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics; // key for the topic and id of subscriber, value is for list of numeric atribute
 
     private List<Double> interest;
     private List<Boolean> ownInterest;
@@ -54,13 +55,55 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         DTNHost otherNode = con.getOtherNode(host);
         if (con.isUp()) {
             // Connection is up
-            SubscribeTopic(otherNode);
+            InterestCheck(otherNode);
+            KDCheck(otherNode);
         }
     }
 
-    private void SubscribeTopic(DTNHost host) {
-        System.out.println("Subscribing to " + host);
+    private void KDCheck(DTNHost otherNode) {
+        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
 
+        // Check if hosts list is valid
+        if (allHosts == null || allHosts.isEmpty()) {
+            System.err.println("❌ Error: No hosts found in the simulation.");
+            return;
+        }
+
+        // Ensure time has elapsed before performing check
+        if ((SimClock.getTime() - lastUpdateTime) < updateInterval) {
+
+            for (DTNHost host : allHosts) {
+                if (host == null) {
+                    System.err.println("Warning: Encountered a null host in the simulation scenario.");
+                    continue;
+                }
+
+                if (host.isKDC()) {
+                    // Check in KDC if that have topic registered
+                    if (CheckRegisterAndSubs()) {
+//                        System.out.println("Register True && Subscribe True");
+                    }
+
+
+                }
+
+            }
+
+        }
+    }
+
+
+    public Boolean CheckRegisterAndSubs() {
+        Map<Integer, List<TupleDe<Boolean, String>>> topics = getRegisteredTopics();
+        Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics = getSubscribedTopics();
+        if (topics == null || subscribedTopics == null) {
+            return false;
+        }
+        return true;
+    }
+
+
+    private void InterestCheck(DTNHost host) {
         // Get all hosts in the simulation
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
         if (allHosts == null || allHosts.isEmpty()) {
@@ -78,6 +121,7 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         if (interest == null || ownInterest == null || numericAttribute == null || numericAttribute2 == null) {
             return; // Skip if any list is null
         }
+//        System.out.println("get own interest: " + ownInterest);
 
         // Ensure all lists have the same size to prevent index errors
         int minSize = Math.min(Math.min(interest.size(), ownInterest.size()),
@@ -88,7 +132,7 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         }
 
         // Create a map to hold the subscriptions
-        Map<TupleDe<String, String>, List<TupleDe<Integer, Integer>>> subscriptions = new HashMap<>();
+        Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscriptions = new HashMap<>();
 
         // Iterate through interests
         for (int i = 0; i < minSize; i++) {
@@ -107,17 +151,17 @@ public class PublishAndSubscriberRouting extends ContentRouter {
                     minValue = attr.getFirst();
                     maxValue = attr.getSecond();
                 }
-
                 // Create a topic attribute tuple
                 List<TupleDe<Integer, Integer>> topicAttributes = new ArrayList<>();
                 topicAttributes.add(new TupleDe<>(minValue, maxValue));
 
                 // Create a unique identifier for the subscriber
                 String subscriberId = String.valueOf(host.getAddress());
-                TupleDe<String, String> topicKey = new TupleDe<>(subscriberId, MESSAGE_TOPICS_S);
+                TupleDe<String, List<Boolean>> topicKey = new TupleDe<>(subscriberId, ownInterest);
 
                 // Add the subscription to the map
                 subscriptions.put(topicKey, topicAttributes);
+//                System.out.println("get subs : "+subscriptions);
             }
         }
 
@@ -142,13 +186,13 @@ public class PublishAndSubscriberRouting extends ContentRouter {
 
         // Send the subscription data to the broker using a Map
         if (sendSubscriptionToBroker(subscriptions, broker)) {
-            System.out.println("Subscription sent to broker: " + broker);
+//            System.out.println("Subscription sent to broker: " + broker);
         } else {
             System.err.println("Failed to send subscription to broker.");
         }
     }
 
-    private boolean sendSubscriptionToBroker(Map<TupleDe<String, String>, List<TupleDe<Integer, Integer>>> subscriptions, DTNHost broker) {
+    private boolean sendSubscriptionToBroker(Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscriptions, DTNHost broker) {
         if (broker == null || subscriptions == null || subscriptions.isEmpty()) {
             return false;
         }
@@ -168,7 +212,7 @@ public class PublishAndSubscriberRouting extends ContentRouter {
 
             // Forward the subscription to the KDC
             if (forwardToKDC(subscriptions, broker)) {
-                System.out.println("Subscription forwarded to KDC by broker: " + broker);
+//                System.out.println("Subscription forwarded to KDC by broker: " + broker);
                 return true;
             } else {
                 System.err.println("Failed to forward subscription to KDC.");
@@ -179,7 +223,7 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         return false;
     }
 
-    private boolean forwardToKDC(Map<TupleDe<String, String>, List<TupleDe<Integer, Integer>>> subscriptions, DTNHost broker) {
+    private boolean forwardToKDC(Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscriptions, DTNHost broker) {
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
 
         // Check if allHosts is null or empty
@@ -195,7 +239,7 @@ public class PublishAndSubscriberRouting extends ContentRouter {
 
                 // Forward the subscription data to the KDC
                 kdcRouter.addSubscriptions(subscriptions);
-                System.out.println("Subscription forwarded to KDC: " + host);
+//                System.out.println("Subscription forwarded to KDC: " + host);
                 return true;
             }
         }
@@ -204,25 +248,59 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         return false;
     }
 
-    private void addSubscriptions(Map<TupleDe<String, String>, List<TupleDe<Integer, Integer>>> subscriptions) {
+    private void addSubscriptions(Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscriptions) {
         if (subscriptions == null || subscriptions.isEmpty()) {
             return;
         }
 
-        // Add the subscriptions to the broker's subscription map
-        for (Map.Entry<TupleDe<String, String>, List<TupleDe<Integer, Integer>>> entry : subscriptions.entrySet()) {
-            TupleDe<String, String> subscriberInfo = entry.getKey();
+        Map<Integer, List<TupleDe<Boolean, String>>> topics = getRegisteredTopics(); // Integer = sub-topik
+        if (topics == null) {
+            return;
+        }
+
+        for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> entry : subscriptions.entrySet()) {
+            TupleDe<String, List<Boolean>> subscriberInfo = entry.getKey();
             List<TupleDe<Integer, Integer>> topicAttributes = entry.getValue();
 
-            // Add the subscription to the subscribedTopics map
+            boolean topicMatches = false;
+            for (TupleDe<Integer, Integer> attr : topicAttributes) {
+                int minValue = attr.getFirst();
+                int maxValue = attr.getSecond();
+
+                for (Map.Entry<Integer, List<TupleDe<Boolean, String>>> regEntry : topics.entrySet()) {
+                    int registeredTopic = regEntry.getKey();
+                    List<TupleDe<Boolean, String>> registeredValues = regEntry.getValue();
+
+                    for (TupleDe<Boolean, String> registeredValue : registeredValues) {
+                        Boolean topicBoolean = registeredValue.getFirst();
+
+                        if (registeredTopic >= minValue && registeredTopic <= maxValue && subscriberInfo.getSecond().contains(topicBoolean)) {
+                            System.out.println("Subscriber " + subscriberInfo.getFirst() + " matches topic " + topicBoolean);
+                            topicMatches = true;
+                            break;
+                        }
+                    }
+                    if (topicMatches) break;
+                }
+                if (!topicMatches) {
+//                    System.out.println("Sub-topic " + minValue + "-" + maxValue + " tidak cocok dengan registered topics.");
+                    continue;
+                }
+            }
+
             if (!subscribedTopics.containsKey(subscriberInfo)) {
                 subscribedTopics.put(subscriberInfo, new ArrayList<>());
             }
-            subscribedTopics.get(subscriberInfo).addAll(topicAttributes);
+            List<TupleDe<Integer, Integer>> existingAttributes = subscribedTopics.get(subscriberInfo);
+            for (TupleDe<Integer, Integer> attribute : topicAttributes) {
+                if (!existingAttributes.contains(attribute)) {
+                    existingAttributes.add(attribute);
+                }
+            }
         }
-
-        System.out.println("Subscriptions added to broker: " + subscriptions);
     }
+
+
 
 
 
@@ -267,60 +345,6 @@ public class PublishAndSubscriberRouting extends ContentRouter {
 
         // Try other messages for transfer
         tryOtherMessages();
-
-        // Periodic update for KDC to handle topic registration and subscription
-        if ((SimClock.getTime() - lastUpdateTime) >= updateInterval) {
-            lastUpdateTime = SimClock.getTime();
-            List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
-
-            // Check if allHosts is null or empty
-            if (allHosts == null || allHosts.isEmpty()) {
-                System.err.println("Error: No hosts found in the simulation scenario.");
-                return;
-            }
-
-            // Iterate through all hosts to find the KDC
-            for (DTNHost host : allHosts) {
-                if (host == null) {
-                    System.err.println("Warning: Encountered a null host in the simulation scenario.");
-                    continue;
-                }
-
-                // Check if the host is a KDC and has a ContentRouter
-                if (host.isKDC() && host.getRouter() instanceof PublishAndSubscriberRouting) {
-                    PublishAndSubscriberRouting kdcRouter = (PublishAndSubscriberRouting) host.getRouter();
-
-                    // Check registered topics
-                    Map<Integer, List<TupleDe<List<Boolean>, String>>> registeredTopics = kdcRouter.getRegisteredTopics();
-                    if (registeredTopics == null || registeredTopics.isEmpty()) {
-                        return;
-                    } else {
-                        System.out.println("KDC has registered topics:");
-                        for (Map.Entry<Integer, List<TupleDe<List<Boolean>, String>>> entry : registeredTopics.entrySet()) {
-                            System.out.println("Topic ID: " + entry.getKey());
-                            for (TupleDe<List<Boolean>, String> tuple : entry.getValue()) {
-                                System.out.println("  Publisher ID: " + tuple.getSecond());
-                                System.out.println("  Topic Values: " + tuple.getFirst());
-                            }
-                        }
-                    }
-
-                    // Check subscribed topics
-                    Map<TupleDe<String, String>, List<TupleDe<Integer, Integer>>> subscribedTopics = kdcRouter.getSubscribedTopics();
-                    if (subscribedTopics == null || subscribedTopics.isEmpty()) {
-                        return;
-                    } else {
-                        System.out.println("KDC has subscribed topics:");
-                        for (Map.Entry<TupleDe<String, String>, List<TupleDe<Integer, Integer>>> entry : subscribedTopics.entrySet()) {
-                            System.out.println("Subscriber ID: " + entry.getKey().getFirst());
-                            for (TupleDe<Integer, Integer> tuple : entry.getValue()) {
-                                System.out.println("  Numeric Attribute: " + tuple.getFirst() + " - " + tuple.getSecond());
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 
 
@@ -362,12 +386,8 @@ public class PublishAndSubscriberRouting extends ContentRouter {
                     if (msg == null) {
                         continue;
                     }
-
-                    // Check if the message has the MESSAGE_TOPICS_S property
-                    if (msg.getProperty(MESSAGE_TOPICS_S) != null) {
-                        if (isSameInterest(msg, other)) {
-                            messages.add(new Tuple<>(msg, con));
-                        }
+                    if (isSameInterest(msg, other)) {
+                        messages.add(new Tuple<>(msg, con));
                     }
                 }
             }
@@ -385,8 +405,8 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         return tryMessagesForConnected(messages);
     }
 
-    public Map<TupleDe<String, String>, List<TupleDe<Integer, Integer>>> getSubscribedTopics() {
-        return subscribedTopics;
+    public Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> getSubscribedTopics() {
+        return this.subscribedTopics;
     }
 
     // Method to replicate the router
