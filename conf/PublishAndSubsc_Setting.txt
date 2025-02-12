@@ -54,6 +54,7 @@ Scenario.nrofHostGroups = 4
 Group.movementModel = RandomWalk
 Group.router = PublishAndSubscriberRouting
 PublishAndSubscriberRouting.updateInterval= 300
+PublishAndSubscriberRouting.LCNUM = 4
 Group.bufferSize = 5M
 Group.waitTime = 0, 120
 # All nodes have the bluetooth interface

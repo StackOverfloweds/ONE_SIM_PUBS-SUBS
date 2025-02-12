@@ -17,6 +17,8 @@ public class ContentRouter extends ActiveRouter {
 
     // create some initial variable
     public static final String MESSAGE_TOPICS_S = "topic";
+    // create sub topic
+    public static final String MESSAGE_SUB_TOPIC_S = "subtopic";
 
     protected Map<DTNHost, Double> startTimestamps;
     protected Map<DTNHost, List<Duration>> connHistory;
@@ -50,7 +52,7 @@ public class ContentRouter extends ActiveRouter {
                 int subTopic = new Random().nextInt(30);  // Generate a random sub-topic
 
                 // Create a TupleDe to store topic list and associated publisher ID
-                String publisherId = String.valueOf(getHost().getAddress());  // Assuming the host's ID can represent the publisher's ID
+                String publisherId = String.valueOf(getHost().getRouter().getHost());  // Assuming the host's ID can represent the publisher's ID
                 TupleDe<Boolean, String> tuple = new TupleDe<>(topicValue, publisherId);
 
                 // Put the tuple in the topic map

@@ -1,5 +1,6 @@
 package routing;
 
+import KDC.NAKT.NAKTBuilder;
 import com.sun.org.apache.xpath.internal.operations.Bool;
 import core.*;
 import routing.util.TupleDe;
@@ -14,22 +15,19 @@ public class PublishAndSubscriberRouting extends ContentRouter {
     private List<Boolean> ownInterest;
     private List<TupleDe<Integer, Integer>> numericAttribute;
     private List<Integer> numericAttribute2;
-
-    private double lastUpdateTime = 0;
-    private double updateInterval;
+    private int lcnum;
 
     /**
      * namespace settings ({@value})
      */
     private static final String PUBSROUTING_NS = "PublishAndSubscriberRouting";
-    private static final String UPDATE_INTERVAL = "updateInterval";
+    protected static final String LCNUM = "LCNUM";
 
     public PublishAndSubscriberRouting(Settings s) {
         // Call the superclass constructor to initialize inherited fields
         super(s);
         Settings ccSettings = new Settings(PUBSROUTING_NS);
-        updateInterval = ccSettings.getInt(UPDATE_INTERVAL);
-
+        lcnum = ccSettings.getInt(LCNUM);
         interest = new ArrayList<>();
         ownInterest = new ArrayList<>();
         numericAttribute = new ArrayList<>();
@@ -40,7 +38,7 @@ public class PublishAndSubscriberRouting extends ContentRouter {
     protected PublishAndSubscriberRouting(PublishAndSubscriberRouting r) {
         // Call the superclass copy constructor
         super(r);
-        updateInterval = r.updateInterval;
+        lcnum = r.lcnum;
         interest = new ArrayList<>(r.interest);
         ownInterest = new ArrayList<>(r.ownInterest);
         numericAttribute = new ArrayList<>(r.numericAttribute);
@@ -56,53 +54,50 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         if (con.isUp()) {
             // Connection is up
             InterestCheck(otherNode);
-            KDCheck(otherNode);
         }
     }
 
-    private void KDCheck(DTNHost otherNode) {
-        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
+//    private void KDCheck(DTNHost otherNode) {
+//        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
+//
+//        // Check if hosts list is valid
+//        if (allHosts == null || allHosts.isEmpty()) {
+//            System.err.println("❌ Error: No hosts found in the simulation.");
+//            return;
+//        }
+//
+//        // Ensure time has elapsed before performing check
+//        if ((SimClock.getTime() - lastUpdateTime) < updateInterval) {
+//
+//            for (DTNHost host : allHosts) {
+//                if (host == null) {
+//                    System.err.println("Warning: Encountered a null host in the simulation scenario.");
+//                    continue;
+//                }
+//
+//                if (host.isKDC()) {
+//                    // Check in KDC if that have topic registered
+//                    if (CheckRegisterAndSubs()) {
 
-        // Check if hosts list is valid
-        if (allHosts == null || allHosts.isEmpty()) {
-            System.err.println("❌ Error: No hosts found in the simulation.");
-            return;
-        }
-
-        // Ensure time has elapsed before performing check
-        if ((SimClock.getTime() - lastUpdateTime) < updateInterval) {
-
-            for (DTNHost host : allHosts) {
-                if (host == null) {
-                    System.err.println("Warning: Encountered a null host in the simulation scenario.");
-                    continue;
-                }
-
-                if (host.isKDC()) {
-                    // Check in KDC if that have topic registered
-                    if (CheckRegisterAndSubs()) {
-//                        System.out.println("Register True && Subscribe True");
-                    }
-
-
-                }
-
-            }
-
-        }
-    }
-
-
-    public Boolean CheckRegisterAndSubs() {
-        Map<Integer, List<TupleDe<Boolean, String>>> topics = getRegisteredTopics();
-        Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics = getSubscribedTopics();
-        if (topics == null || subscribedTopics == null) {
-            return false;
-        }
-        return true;
-    }
-
-
+    /// /                        System.out.println("Register True && Subscribe True");
+//                    }
+//
+//
+//                }
+//
+//            }
+//
+//        }
+//    }
+//
+//    public Boolean CheckRegisterAndSubs() {
+//        Map<Integer, List<TupleDe<Boolean, String>>> topics = getRegisteredTopics();
+//        Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics = getSubscribedTopics();
+//        if (topics == null || subscribedTopics == null) {
+//            return false;
+//        }
+//        return true;
+//    }
     private void InterestCheck(DTNHost host) {
         // Get all hosts in the simulation
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
@@ -258,11 +253,15 @@ public class PublishAndSubscriberRouting extends ContentRouter {
             return;
         }
 
+        Map<TupleDe<String, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, String>>> subscriberTopicMap = new HashMap<>();
+
         for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> entry : subscriptions.entrySet()) {
             TupleDe<String, List<Boolean>> subscriberInfo = entry.getKey();
             List<TupleDe<Integer, Integer>> topicAttributes = entry.getValue();
 
             boolean topicMatches = false;
+            List<TupleDe<TupleDe<Boolean, Integer>, String>> matchedTopics = new ArrayList<>();
+
             for (TupleDe<Integer, Integer> attr : topicAttributes) {
                 int minValue = attr.getFirst();
                 int maxValue = attr.getSecond();
@@ -273,17 +272,17 @@ public class PublishAndSubscriberRouting extends ContentRouter {
 
                     for (TupleDe<Boolean, String> registeredValue : registeredValues) {
                         Boolean topicBoolean = registeredValue.getFirst();
+                        String idPubs = registeredValue.getSecond();
 
                         if (registeredTopic >= minValue && registeredTopic <= maxValue && subscriberInfo.getSecond().contains(topicBoolean)) {
-                            System.out.println("Subscriber " + subscriberInfo.getFirst() + " matches topic " + topicBoolean);
                             topicMatches = true;
+                            matchedTopics.add(new TupleDe<>(new TupleDe<>(topicBoolean, registeredTopic), idPubs)); // Struktur baru
                             break;
                         }
                     }
                     if (topicMatches) break;
                 }
                 if (!topicMatches) {
-//                    System.out.println("Sub-topic " + minValue + "-" + maxValue + " tidak cocok dengan registered topics.");
                     continue;
                 }
             }
@@ -297,9 +296,17 @@ public class PublishAndSubscriberRouting extends ContentRouter {
                     existingAttributes.add(attribute);
                 }
             }
+
+            // Simpan subscriber dan topik yang cocok ke dalam Map
+            if (!matchedTopics.isEmpty()) {
+                subscriberTopicMap.put(subscriberInfo, matchedTopics);
+            }
+
+            // Jika sukses subscribe, buat NAKT
+            NAKTBuilder nakt = new NAKTBuilder(lcnum);
+            nakt.buildNAKT(subscriberTopicMap, existingAttributes);
         }
     }
-
 
 
 
