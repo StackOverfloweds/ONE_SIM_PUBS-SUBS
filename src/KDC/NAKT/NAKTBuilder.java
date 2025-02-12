@@ -1,6 +1,7 @@
 package KDC.NAKT;
 
 import routing.util.TupleDe;
+
 import java.util.List;
 import java.util.Map;
 
@@ -13,12 +14,6 @@ public class NAKTBuilder {
         this.keyManager = new KeyManager();
     }
 
-    /**
-     * Membangun NAKT berdasarkan subscriberTopicMap dan atribut yang ada.
-     *
-     * @param subscriberTopicMap    Map dari subscriber ke daftar topik yang cocok
-     * @param existingAttributes    Daftar atribut eksisting yang akan digunakan dalam pembentukan NAKT
-     */
     public void buildNAKT(Map<TupleDe<String, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, String>>> subscriberTopicMap,
                           List<TupleDe<Integer, Integer>> existingAttributes) {
         if (subscriberTopicMap == null || subscriberTopicMap.isEmpty() || existingAttributes == null || existingAttributes.isEmpty()) {
@@ -27,28 +22,37 @@ public class NAKTBuilder {
 
         for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, String>>> entry : subscriberTopicMap.entrySet()) {
             TupleDe<String, List<Boolean>> subscriberInfo = entry.getKey();
-            List<TupleDe<TupleDe<Boolean, Integer>, String>> topicList = entry.getValue();
+            List<TupleDe<TupleDe<Boolean, Integer>, String>> PublisherInfo = entry.getValue();
 
-            if (topicList == null || topicList.isEmpty()) continue;
+            if (PublisherInfo == null || PublisherInfo.isEmpty()) continue;
 
-            System.out.println("▶ Building NAKT for Subscriber: " + subscriberInfo.getFirst());
+            TupleDe<TupleDe<Boolean, Integer>, String> firstEntry = PublisherInfo.get(0);
+            TupleDe<Boolean, Integer> innerTuple = firstEntry.getFirst();
+            int num = innerTuple.getSecond(); // num is sub-topic publisher
+            System.out.println("num: " + num);
 
-            for (TupleDe<TupleDe<Boolean, Integer>, String> topic : topicList) {
-                TupleDe<Boolean, Integer> topicData = topic.getFirst();
-                int topicId = topicData.getSecond();
+            for (TupleDe<Integer, Integer> range : existingAttributes) {
+                int maxValue = range.getSecond();
 
-                System.out.println("\uD83C\uDF32 Root of Tree for Topic [" + topicId + "]");
-
-                String rootKey = keyManager.generateRootKey();
+                String rootKey = keyManager.generateRootKey(num);
                 System.out.println("\uD83D\uDD10 Encrypted Root Key: " + rootKey);
 
-                int adjustedMaxValue = getNearestPowerOfTwo(topicId) - 1;
+                int adjustedMaxValue = getNearestPowerOfTwo(maxValue) - 1;
                 encryptTreeNodes(0, adjustedMaxValue, rootKey, "", 1);
             }
+
             System.out.println("✅ NAKT Build Completed for: " + subscriberInfo.getFirst() + "\n");
         }
     }
 
+    /**
+     * recursif metode to generate Tree Node
+     * @param min
+     * @param max
+     * @param parentKey
+     * @param binaryPath
+     * @param depth
+     */
     private void encryptTreeNodes(int min, int max, String parentKey, String binaryPath, int depth) {
         if (depth > lcnum || min >= max) return;
 

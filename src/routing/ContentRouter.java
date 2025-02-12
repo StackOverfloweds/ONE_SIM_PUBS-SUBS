@@ -49,7 +49,7 @@ public class ContentRouter extends ActiveRouter {
                 //create random boolean value
                 boolean topicValue = Math.random()< 0.5; //generate random topic
 
-                int subTopic = new Random().nextInt(30);  // Generate a random sub-topic
+                int subTopic = new Random().nextInt(29) + 1 ;  // Generate a random sub-topic
 
                 // Create a TupleDe to store topic list and associated publisher ID
                 String publisherId = String.valueOf(getHost().getRouter().getHost());  // Assuming the host's ID can represent the publisher's ID

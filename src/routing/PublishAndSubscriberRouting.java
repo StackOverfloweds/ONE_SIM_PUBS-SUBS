@@ -151,7 +151,7 @@ public class PublishAndSubscriberRouting extends ContentRouter {
                 topicAttributes.add(new TupleDe<>(minValue, maxValue));
 
                 // Create a unique identifier for the subscriber
-                String subscriberId = String.valueOf(host.getAddress());
+                String subscriberId = String.valueOf(getHost().getRouter().getHost());
                 TupleDe<String, List<Boolean>> topicKey = new TupleDe<>(subscriberId, ownInterest);
 
                 // Add the subscription to the map
@@ -267,16 +267,16 @@ public class PublishAndSubscriberRouting extends ContentRouter {
                 int maxValue = attr.getSecond();
 
                 for (Map.Entry<Integer, List<TupleDe<Boolean, String>>> regEntry : topics.entrySet()) {
-                    int registeredTopic = regEntry.getKey();
+                    int subTopicPublisher = regEntry.getKey();
                     List<TupleDe<Boolean, String>> registeredValues = regEntry.getValue();
 
                     for (TupleDe<Boolean, String> registeredValue : registeredValues) {
                         Boolean topicBoolean = registeredValue.getFirst();
                         String idPubs = registeredValue.getSecond();
 
-                        if (registeredTopic >= minValue && registeredTopic <= maxValue && subscriberInfo.getSecond().contains(topicBoolean)) {
+                        if (subTopicPublisher >= minValue && subTopicPublisher <= maxValue && subscriberInfo.getSecond().contains(topicBoolean)) {
                             topicMatches = true;
-                            matchedTopics.add(new TupleDe<>(new TupleDe<>(topicBoolean, registeredTopic), idPubs)); // Struktur baru
+                            matchedTopics.add(new TupleDe<>(new TupleDe<>(topicBoolean, subTopicPublisher), idPubs)); // Struktur baru
                             break;
                         }
                     }
