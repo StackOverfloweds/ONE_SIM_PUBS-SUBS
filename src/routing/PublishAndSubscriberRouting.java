@@ -304,11 +304,36 @@ public class PublishAndSubscriberRouting extends ContentRouter {
 
             // Jika sukses subscribe, buat NAKT
             NAKTBuilder nakt = new NAKTBuilder(lcnum);
-            nakt.buildNAKT(subscriberTopicMap, existingAttributes);
+            if (nakt.buildNAKT(subscriberTopicMap, existingAttributes)) {
+                Map<String, List<TupleDe<String, String>>> publisherKeys = nakt.getKeysForPublisher();
+                Map<String, List<TupleDe<String, String>>> subscriberKeys = nakt.getKeysForSubscriber();
+
+                // Pastikan tidak null & tidak kosong sebelum diproses
+                if (publisherKeys != null && !publisherKeys.isEmpty()) {
+                    System.out.println("🔑 Publisher Keys:");
+                    for (Map.Entry<String, List<TupleDe<String, String>>> entryKey : publisherKeys.entrySet()) {
+                        if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
+                            System.out.println("Publisher ID: " + entryKey.getKey() + " | Keys: " + entryKey.getValue());
+                        }
+                    }
+                } else {
+                    System.out.println("❌ No Publisher Keys available.");
+                }
+
+                if (subscriberKeys != null && !subscriberKeys.isEmpty()) {
+                    System.out.println("🔑 Subscriber Keys:");
+                    for (Map.Entry<String, List<TupleDe<String, String>>> entryKey : subscriberKeys.entrySet()) {
+                        if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
+                            System.out.println("Subscriber ID: " + entryKey.getKey() + " | Keys: " + entryKey.getValue());
+                        }
+                    }
+                } else {
+                    System.out.println("❌ No Subscriber Keys available.");
+                }
+            }
+
         }
     }
-
-
 
 
     /**
