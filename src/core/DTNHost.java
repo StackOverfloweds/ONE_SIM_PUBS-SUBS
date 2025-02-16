@@ -62,6 +62,14 @@ public class DTNHost implements Comparable<DTNHost> {
     private List<TupleDe<Integer, Integer>> numericAtribute; //min max atribute value of int
     private List<Integer> numericAtribute2;
 
+    // create variable for publsiher
+    private boolean topicValue;
+    private int subTopicValue ;
+
+    // Variabel flag untuk memastikan hanya satu topik yang diberikan
+    private boolean isTopicAssigned = false;
+
+
     static {
         DTNSim.registerForReset(DTNHost.class.getCanonicalName());
         reset();
@@ -112,10 +120,9 @@ public class DTNHost implements Comparable<DTNHost> {
             // Jika GroupID tidak sesuai dengan peran yang ditentukan
             throw new IllegalArgumentException("Invalid GroupID: " + groupId);
         }
-
+        Random random = new Random();
         // create subscriber interest for something random
         if (isSubscriber) {
-            Random random = new Random();
             ownInterest = new ArrayList<>();
             interest = new ArrayList<>();
             numericAtribute = new ArrayList<>();
@@ -143,6 +150,15 @@ public class DTNHost implements Comparable<DTNHost> {
             interest.add(isInterested ? 0.5 : 0.0);
         }
 
+
+
+        // we gonna create some topic and sub topic for each pulisher
+        // Ensure a single topicValue and subTopicValue for each publisher
+        if (isPublisher && !isTopicAssigned) {
+            this.topicValue = random.nextBoolean();
+            this.subTopicValue = random.nextInt(29) + 1;
+            this.isTopicAssigned = true;
+        }
 
         for (NetworkInterface i : interf) {
             NetworkInterface ni = i.replicate();
@@ -668,19 +684,27 @@ public class DTNHost implements Comparable<DTNHost> {
     }
 
     public List<Double> getInterest() {
-        return interest;
+        return this.interest;
     }
 
     public List<Boolean> getOwnInterest() {
-        return ownInterest;
+        return this.ownInterest;
     }
 
     public List<TupleDe<Integer, Integer>> getNumericAtribute() {
-        return numericAtribute;
+        return this.numericAtribute;
     }
 
     public List<Integer> getNumericAtribute2() {
-        return numericAtribute2;
+        return this.numericAtribute2;
+    }
+
+    public int getSubTopic() {
+        return this.subTopicValue;
+    }
+
+    public boolean getTopicValue () {
+        return this.topicValue;
     }
 
 

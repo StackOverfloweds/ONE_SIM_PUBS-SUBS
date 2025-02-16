@@ -1,22 +1,30 @@
 package routing;
 
 import KDC.NAKT.NAKTBuilder;
-import com.sun.org.apache.xpath.internal.operations.Bool;
+import KDC.Publisher.EncryptionUtil;
 import core.*;
 import routing.util.TupleDe;
 
+import java.util.*;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.util.*;
 
 public class PublishAndSubscriberRouting extends ContentRouter {
 
     protected Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics; // key for the topic and id of subscriber, value is for list of numeric atribute
+    protected Map<String, List<TupleDe<String, String>>> keyEncryption;
+    protected Map<String, List<TupleDe<String, String>>> keyAuthentication;
+    protected Map<Integer, List<TupleDe<Boolean, String>>> registeredTopics;
 
     private List<Double> interest;
     private List<Boolean> ownInterest;
     private List<TupleDe<Integer, Integer>> numericAttribute;
     private List<Integer> numericAttribute2;
     private int lcnum;
-
+    private double lastUpdateTime = 0;
+    private boolean topicVall;
+    private int subTopicVall;
     /**
      * namespace settings ({@value})
      */
@@ -33,6 +41,9 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         numericAttribute = new ArrayList<>();
         numericAttribute2 = new ArrayList<>();
         subscribedTopics = new HashMap<>();
+        keyEncryption = new HashMap<>();
+        keyAuthentication = new HashMap<>();
+        registeredTopics = new HashMap<>();
     }
 
     protected PublishAndSubscriberRouting(PublishAndSubscriberRouting r) {
@@ -44,60 +55,199 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         numericAttribute = new ArrayList<>(r.numericAttribute);
         numericAttribute2 = new ArrayList<>(r.numericAttribute2);
         subscribedTopics = new HashMap<>(r.subscribedTopics);
+        keyEncryption = new HashMap<>(r.keyEncryption);
+        keyAuthentication = new HashMap<>(r.keyAuthentication);
+        registeredTopics = new HashMap<>(r.registeredTopics);
     }
+
 
     @Override
     public void changedConnection(Connection con) {
         super.changedConnection(con);
         DTNHost host = getHost();
         DTNHost otherNode = con.getOtherNode(host);
+        topicVall = otherNode.getTopicValue();
+        subTopicVall = otherNode.getSubTopic();
         if (con.isUp()) {
             // Connection is up
+            // for pubs
+            sendToBrokerForRegistration(topicVall, subTopicVall);
             InterestCheck(otherNode);
         }
     }
 
-//    private void KDCheck(DTNHost otherNode) {
-//        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
-//
-//        // Check if hosts list is valid
-//        if (allHosts == null || allHosts.isEmpty()) {
-//            System.err.println("❌ Error: No hosts found in the simulation.");
-//            return;
-//        }
-//
-//        // Ensure time has elapsed before performing check
-//        if ((SimClock.getTime() - lastUpdateTime) < updateInterval) {
-//
-//            for (DTNHost host : allHosts) {
-//                if (host == null) {
-//                    System.err.println("Warning: Encountered a null host in the simulation scenario.");
-//                    continue;
-//                }
-//
-//                if (host.isKDC()) {
-//                    // Check in KDC if that have topic registered
-//                    if (CheckRegisterAndSubs()) {
+    @Override
+    public boolean createNewMessage(Message msg) {
+        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
 
-    /// /                        System.out.println("Register True && Subscribe True");
-//                    }
+        if (keyEncryption.isEmpty() || allHosts == null) {
+            return false;
+        }
+
+        for (DTNHost host : allHosts) {
+            String hostId = String.valueOf(host.getRouter().getHost());
+
+            // Cari host yang sesuai dengan hostId
+            if (!keyEncryption.containsKey(hostId)) {
+                continue;  // Lewati jika tidak cocok
+            }
+
+            List<TupleDe<String, String>> keys = keyEncryption.get(hostId);
+
+            if (keys == null || keys.isEmpty()) {  // Pastikan list tidak kosong
+                continue;
+            }
+
+
+            // Ambil topic dan subTopic dari host yang cocok
+            if (hostId.equals(String.valueOf(getHost().getRouter().getHost()))) {
+                topicVall = host.getTopicValue();
+                subTopicVall = host.getSubTopic();
+            }
 //
-//
-//                }
-//
-//            }
-//
-//        }
-//    }
-//
-//    public Boolean CheckRegisterAndSubs() {
-//        Map<Integer, List<TupleDe<Boolean, String>>> topics = getRegisteredTopics();
-//        Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics = getSubscribedTopics();
-//        if (topics == null || subscribedTopics == null) {
-//            return false;
-//        }
-//        return true;
-//    }
+            System.out.println("topicVall: " + topicVall);
+            System.out.println("subTopicVall: " + subTopicVall);
+
+            String randomMessage = EncryptionUtil.generateRandomString(20); // 20 karakter
+
+            String keyEncrypt = keys.get(0).getSecond(); // Gunakan key dari Tuple
+
+            String hashedMessage = EncryptionUtil.hashWithHmacSHA256(randomMessage, keyEncrypt);
+
+            Map<String, Object> messageData = new HashMap<>();
+            messageData.put("topic", topicVall);
+            messageData.put("subTopic", subTopicVall);
+            messageData.put("msg", hashedMessage);
+
+            // **5. Tambahkan ke properti message**
+            makeRoomForMessage(msg.getSize());
+            msg.setTtl(this.msgTtl);
+            msg.addProperty(MESSAGE_TOPICS_S, messageData);
+            System.out.println("Success to send message : " + msg.getProperty(MESSAGE_TOPICS_S));
+            return super.createNewMessage(msg);
+        }
+        return false;
+    }
+
+    private boolean sendToBrokerForRegistration(boolean topic, int subTopic) {
+        if (!getHost().isPublisher() || subTopic <= 0) {
+            return false;  // Pastikan subTopic valid
+        }
+
+        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
+        Map<Integer, TupleDe<Boolean, String>> topicMap = new HashMap<>();
+
+        String publisherId = String.valueOf(getHost().getRouter().getHost());
+        topicMap.put(subTopic, new TupleDe<>(topic, publisherId));
+
+        // Pastikan nilai dalam topicMap tidak ada yang null
+        for (Map.Entry<Integer, TupleDe<Boolean, String>> entry : topicMap.entrySet()) {
+            TupleDe<Boolean, String> tuple = entry.getValue();
+            if (tuple == null || tuple.getFirst() == null || tuple.getSecond() == null) {
+                System.err.println("Invalid tuple for topic " + entry.getKey());
+                return false;
+            }
+        }
+
+        boolean brokerRegistered = false;
+
+        // Cari broker untuk mendaftarkan topik
+        for (DTNHost host : allHosts) {
+            if (host.isBroker() && host.getRouter() instanceof PublishAndSubscriberRouting) {
+                PublishAndSubscriberRouting brokerRouter = (PublishAndSubscriberRouting) host.getRouter();
+
+                if (brokerRouter.getHost().equals(host)) { // Validasi broker yang sesuai
+                    brokerRegistered = true;
+
+                    // Kirim topik ke KDC melalui broker
+                    if (!forwardToKDC(topicMap, brokerRouter.getHost())) {
+                        System.err.println("Failed to forward topic registration to KDC.");
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if (!brokerRegistered) {
+            System.err.println("No available broker to handle the registration.");
+            return false;
+        }
+        return true;
+    }
+
+    private boolean forwardToKDC(Map<?, ?> data, DTNHost broker) {
+        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
+
+        if (allHosts == null || allHosts.isEmpty()) {
+            return false;
+        }
+
+        for (DTNHost host : allHosts) {
+            if (host.isKDC()) {
+                Object router = host.getRouter();
+
+                if (router instanceof PublishAndSubscriberRouting) {
+                    PublishAndSubscriberRouting psRouter = (PublishAndSubscriberRouting) router;
+
+
+                    if (!data.isEmpty()) {
+                        Object firstValue = data.values().iterator().next();
+
+                        if (firstValue instanceof List<?>) {
+                            psRouter.addSubscriptions((Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>>) data);
+                            return true;
+                        } else if (firstValue instanceof TupleDe<?, ?>) {
+                            psRouter.processTopicRegistrationAtKDC((Map<Integer, TupleDe<Boolean, String>>) data);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean processTopicRegistrationAtKDC(Map<Integer, TupleDe<Boolean, String>> topicMap) {
+
+        if (topicMap == null || topicMap.isEmpty()) {
+            System.err.println("No topics found in the map for registration.");
+            return false;
+        }
+
+        // Validate the topic map
+        for (Map.Entry<Integer, TupleDe<Boolean, String>> entry : topicMap.entrySet()) {
+            TupleDe<Boolean, String> tuple = entry.getValue();
+            if (tuple == null || tuple.getFirst() == null || tuple.getSecond() == null) {
+                System.err.println("Invalid tuple for topic " + entry.getKey());
+                return false;
+            }
+        }
+
+        boolean anyRegistered = false; // Flag untuk melihat apakah ada yang berhasil didaftarkan
+
+        for (Map.Entry<Integer, TupleDe<Boolean, String>> entry : topicMap.entrySet()) {
+            int subTopic = entry.getKey();
+            TupleDe<Boolean, String> tuple = entry.getValue();
+//            System.out.println("Processing topic: " + subTopic + " -> " + tuple);
+
+            // Gunakan computeIfAbsent untuk lebih efisien dalam inisialisasi
+            registeredTopics.computeIfAbsent(subTopic, k -> new ArrayList<>());
+
+            // Cek apakah sudah terdaftar sebelumnya
+            boolean isRegistered = registeredTopics.get(subTopic).stream().anyMatch(existingTuple -> existingTuple.getSecond().equals(tuple.getSecond()));
+
+            if (!isRegistered) {
+                registeredTopics.get(subTopic).add(tuple);
+//                System.out.println("✅ Registered topic " + subTopic + " for " + tuple.getSecond());
+                anyRegistered = true;
+            } else {
+//                System.out.println("⚠️ Already registered: " + subTopic + " -> " + tuple.getSecond());
+            }
+        }
+
+        return anyRegistered; // Hanya return true jika ada yang berhasil didaftarkan
+    }
+
     private void InterestCheck(DTNHost host) {
         // Get all hosts in the simulation
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
@@ -119,8 +269,7 @@ public class PublishAndSubscriberRouting extends ContentRouter {
 //        System.out.println("get own interest: " + ownInterest);
 
         // Ensure all lists have the same size to prevent index errors
-        int minSize = Math.min(Math.min(interest.size(), ownInterest.size()),
-                Math.min(numericAttribute.size(), numericAttribute2.size()));
+        int minSize = Math.min(Math.min(interest.size(), ownInterest.size()), Math.min(numericAttribute.size(), numericAttribute2.size()));
 
         if (minSize == 0) {
             return; // Skip if any list is empty
@@ -175,7 +324,6 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         }
 
         if (broker == null) {
-            System.err.println("Error: No broker found to send subscription.");
             return;
         }
 
@@ -218,40 +366,16 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         return false;
     }
 
-    private boolean forwardToKDC(Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscriptions, DTNHost broker) {
-        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
-
-        // Check if allHosts is null or empty
-        if (allHosts == null || allHosts.isEmpty()) {
-            System.err.println("Error: No hosts found in the simulation scenario.");
-            return false;
-        }
-
-        // Find the KDC
-        for (DTNHost host : allHosts) {
-            if (host.isKDC() && host.getRouter() instanceof PublishAndSubscriberRouting) {
-                PublishAndSubscriberRouting kdcRouter = (PublishAndSubscriberRouting) host.getRouter();
-
-                // Forward the subscription data to the KDC
-                kdcRouter.addSubscriptions(subscriptions);
-//                System.out.println("Subscription forwarded to KDC: " + host);
-                return true;
-            }
-        }
-
-        System.err.println("Error: No KDC found to forward subscription.");
-        return false;
-    }
-
     private void addSubscriptions(Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscriptions) {
         if (subscriptions == null || subscriptions.isEmpty()) {
             return;
         }
 
         Map<Integer, List<TupleDe<Boolean, String>>> topics = getRegisteredTopics(); // Integer = sub-topik
-        if (topics == null) {
+        if (topics == null || topics.isEmpty()) {
             return;
         }
+//        System.out.println("get topics : " + topics);
 
         Map<TupleDe<String, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, String>>> subscriberTopicMap = new HashMap<>();
 
@@ -262,6 +386,9 @@ public class PublishAndSubscriberRouting extends ContentRouter {
             boolean topicMatches = false;
             List<TupleDe<TupleDe<Boolean, Integer>, String>> matchedTopics = new ArrayList<>();
 
+            if (topicAttributes == null || topicAttributes.isEmpty()) {
+                return;
+            }
             for (TupleDe<Integer, Integer> attr : topicAttributes) {
                 int minValue = attr.getFirst();
                 int maxValue = attr.getSecond();
@@ -302,6 +429,8 @@ public class PublishAndSubscriberRouting extends ContentRouter {
                 subscriberTopicMap.put(subscriberInfo, matchedTopics);
             }
 
+//            System.out.println("Added subscriptions for " + subscriberTopicMap);
+
             // Jika sukses subscribe, buat NAKT
             NAKTBuilder nakt = new NAKTBuilder(lcnum);
             if (nakt.buildNAKT(subscriberTopicMap, existingAttributes)) {
@@ -310,31 +439,44 @@ public class PublishAndSubscriberRouting extends ContentRouter {
 
                 // Pastikan tidak null & tidak kosong sebelum diproses
                 if (publisherKeys != null && !publisherKeys.isEmpty()) {
-                    System.out.println("🔑 Publisher Keys:");
+//                    System.out.println("🔑 Publisher Keys:");
                     for (Map.Entry<String, List<TupleDe<String, String>>> entryKey : publisherKeys.entrySet()) {
                         if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
-                            System.out.println("Publisher ID: " + entryKey.getKey() + " | Keys: " + entryKey.getValue());
+//                            System.out.println("Publisher ID: " + entryKey.getKey() + " | Keys: " + entryKey.getValue());
+
+                            // Pastikan key sudah ada, jika belum buat list baru
+                            if (!keyEncryption.containsKey(entryKey.getKey())) {
+                                keyEncryption.put(entryKey.getKey(), new ArrayList<>());
+                            }
+
+                            // Tambahkan elemen satu per satu
+                            for (TupleDe<String, String> key : entryKey.getValue()) {
+                                keyEncryption.get(entryKey.getKey()).add(key);
+                            }
                         }
                     }
                 } else {
-                    System.out.println("❌ No Publisher Keys available.");
+//                    System.out.println("❌ No Publisher Keys available.");
                 }
 
                 if (subscriberKeys != null && !subscriberKeys.isEmpty()) {
-                    System.out.println("🔑 Subscriber Keys:");
+//                    System.out.println("🔑 Subscriber Keys:");
                     for (Map.Entry<String, List<TupleDe<String, String>>> entryKey : subscriberKeys.entrySet()) {
                         if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
-                            System.out.println("Subscriber ID: " + entryKey.getKey() + " | Keys: " + entryKey.getValue());
+//                            System.out.println("Subscriber ID: " + entryKey.getKey() + " | Keys: " + entryKey.getValue());
                         }
                     }
                 } else {
-                    System.out.println("❌ No Subscriber Keys available.");
+//                    System.out.println("❌ No Subscriber Keys available.");
                 }
             }
 
         }
     }
 
+    protected Map<Integer, List<TupleDe<Boolean, String>>> getRegisteredTopics() {
+        return this.registeredTopics;
+    }
 
     /**
      * Comparator untuk sorting message berdasarkan

@@ -19,7 +19,9 @@ public class NAKTBuilder {
 
     public boolean buildNAKT(Map<TupleDe<String, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, String>>> subscriberTopicMap,
                              List<TupleDe<Integer, Integer>> existingAttributes) {
+//        System.out.println("get subscriber topics "+subscriberTopicMap);
         if (subscriberTopicMap == null || subscriberTopicMap.isEmpty() || existingAttributes == null || existingAttributes.isEmpty()) {
+//            System.out.println("No subscriber topic or existing attributes");
             return false;
         }
 
@@ -33,14 +35,14 @@ public class NAKTBuilder {
             TupleDe<Boolean, Integer> innerTuple = firstEntry.getFirst();
             int num = innerTuple.getSecond(); // num is the publisher's sub-topic
             String publisherID = firstEntry.getSecond(); // Publisher ID
-            System.out.println("num: " + num + " | Publisher ID: " + publisherID);
+//            System.out.println("num: " + num + " | Publisher ID: " + publisherID);
 
             for (TupleDe<Integer, Integer> range : existingAttributes) {
                 int minValue = range.getFirst();
                 int maxValue = range.getSecond();
 
                 String rootKey = keyManager.generateRootKey(num);
-                System.out.println("🔐 Encrypted Root Key: " + rootKey);
+//                System.out.println("🔐 Encrypted Root Key: " + rootKey);
 
                 int adjustedMaxValue = getNearestPowerOfTwo(maxValue) - 1;
                 List<TupleDe<String, String>> keyList = new ArrayList<>();
@@ -57,7 +59,7 @@ public class NAKTBuilder {
 
                 if (selectedKey != null) {
                     encryptedKeyMap.put(publisherID, Collections.singletonList(selectedKey));
-                    System.out.println("🔑 Selected Key for num=" + num + ": " + selectedKey);
+//                    System.out.println("🔑 Selected Key for num=" + num + ": " + selectedKey);
                 }
 
                 // Find the deepest key within the subscriber range
@@ -82,12 +84,12 @@ public class NAKTBuilder {
                 // Store only the deepest key in subscriberKeyMap
                 if (deepestKey != null) {
                     subscriberKeyMap.put(subscriberInfo.getFirst(), Collections.singletonList(deepestKey));
-                    System.out.println("🔑 Selected Deepest Key for subscriber range [" + minValue + " - " + maxValue + "]: " + deepestKey);
+//                    System.out.println("🔑 Selected Deepest Key for subscriber range [" + minValue + " - " + maxValue + "]: " + deepestKey);
                 }
             }
-            System.out.println("✅ NAKT Build Completed for: " + subscriberInfo.getFirst() + "\n");
+//            System.out.println("✅ NAKT Build Completed for: " + subscriberInfo.getFirst() + "\n");
         }
-        return true;
+        return  true;
     }
 
     /**
@@ -106,9 +108,9 @@ public class NAKTBuilder {
         keyList.add(new TupleDe<>(leftPath, leftKey));
         keyList.add(new TupleDe<>(rightPath, rightKey));
 
-        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
-        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
-        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);
+//        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
+//        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
+//        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);
 
         encryptTreeNodes(min, mid, leftKey, leftPath, depth + 1, keyList);
         encryptTreeNodes(mid + 1, max, rightKey, rightPath, depth + 1, keyList);
