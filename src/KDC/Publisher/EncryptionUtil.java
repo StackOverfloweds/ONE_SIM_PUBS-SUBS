@@ -5,17 +5,19 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.security.InvalidKeyException;
+import java.util.Base64;
 import java.util.Random;
 
 public class EncryptionUtil {
 
     private static final String ALGORITHM = "HmacSHA256";
+
     /**
      * Menghasilkan hash HMAC-SHA256 dari pesan yang diberikan dengan kunci enkripsi.
      *
      * @param message Pesan yang akan di-hash
      * @param key     Kunci enkripsi
-     * @return Hasil hash dalam format heksadesimal
+     * @return Hasil hash dalam format Base64
      */
     public static String hashWithHmacSHA256(String message, String key) {
         try {
@@ -24,13 +26,8 @@ public class EncryptionUtil {
             mac.init(secretKeySpec);
 
             byte[] hashBytes = mac.doFinal(message.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hashString = new StringBuilder();
-
-            for (byte b : hashBytes) {
-                hashString.append(String.format("%02x", b)); // Konversi ke format hex
-            }
-
-            return hashString.toString();
+            // Base64 encode the hash bytes
+            return Base64.getEncoder().encodeToString(hashBytes);
         } catch (NoSuchAlgorithmException | InvalidKeyException e) {
             throw new RuntimeException("Error hashing message with HMAC-SHA256", e);
         }

@@ -1,5 +1,13 @@
+# Ignore Gradle files
+.gradle/
+
 # Ignore IntelliJ IDEA project files
 .idea/
-reports/
-.gradle
+
+# Ignore build directories
 build/
+target/
+
+# Other common ignored files
+*.log
+*.tmp

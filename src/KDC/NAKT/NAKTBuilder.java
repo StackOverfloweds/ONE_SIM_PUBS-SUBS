@@ -7,8 +7,8 @@ import java.util.*;
 public class NAKTBuilder {
     private final int lcnum;
     private final KeyManager keyManager;
-    private final Map<String, List<TupleDe<String, String>>> encryptedKeyMap;
-    private final Map<String, List<TupleDe<String, String>>> subscriberKeyMap; // Map for Subscriber
+    private final Map<String, TupleDe<String, String>> encryptedKeyMap;
+    private final Map<String, TupleDe<String, String>> subscriberKeyMap;
 
     public NAKTBuilder(int lcnum) {
         this.lcnum = lcnum;
@@ -19,77 +19,67 @@ public class NAKTBuilder {
 
     public boolean buildNAKT(Map<TupleDe<String, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, String>>> subscriberTopicMap,
                              List<TupleDe<Integer, Integer>> existingAttributes) {
-//        System.out.println("get subscriber topics "+subscriberTopicMap);
         if (subscriberTopicMap == null || subscriberTopicMap.isEmpty() || existingAttributes == null || existingAttributes.isEmpty()) {
-//            System.out.println("No subscriber topic or existing attributes");
             return false;
         }
 
         for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, String>>> entry : subscriberTopicMap.entrySet()) {
             TupleDe<String, List<Boolean>> subscriberInfo = entry.getKey();
-            List<TupleDe<TupleDe<Boolean, Integer>, String>> PublisherInfo = entry.getValue();
+            List<TupleDe<TupleDe<Boolean, Integer>, String>> publisherInfo = entry.getValue();
+//            System.out.println("subscriberInfo: " + subscriberInfo);
+            if (publisherInfo == null || publisherInfo.isEmpty()) continue;
 
-            if (PublisherInfo == null || PublisherInfo.isEmpty()) continue;
-
-            TupleDe<TupleDe<Boolean, Integer>, String> firstEntry = PublisherInfo.get(0);
+            TupleDe<TupleDe<Boolean, Integer>, String> firstEntry = publisherInfo.get(0);
             TupleDe<Boolean, Integer> innerTuple = firstEntry.getFirst();
-            int num = innerTuple.getSecond(); // num is the publisher's sub-topic
-            String publisherID = firstEntry.getSecond(); // Publisher ID
-//            System.out.println("num: " + num + " | Publisher ID: " + publisherID);
+            int num = innerTuple.getSecond();
+            String publisherID = firstEntry.getSecond();
 
-            for (TupleDe<Integer, Integer> range : existingAttributes) {
-                int minValue = range.getFirst();
-                int maxValue = range.getSecond();
-
+            // Check if the publisher key already exists
+            if (!encryptedKeyMap.containsKey(publisherID)) {
                 String rootKey = keyManager.generateRootKey(num);
-//                System.out.println("🔐 Encrypted Root Key: " + rootKey);
-
-                int adjustedMaxValue = getNearestPowerOfTwo(maxValue) - 1;
                 List<TupleDe<String, String>> keyList = new ArrayList<>();
-                encryptTreeNodes(0, adjustedMaxValue, rootKey, "", 1, keyList);
+                encryptTreeNodes(0, getNearestPowerOfTwo(num) - 1, rootKey, "", 1, keyList);
 
-                // Convert num to binary to find the corresponding path
                 String binaryPathPubs = Integer.toBinaryString(num);
-
-                // Find the key that matches the binary path
                 TupleDe<String, String> selectedKey = keyList.stream()
                         .filter(tuple -> tuple.getFirst().equals(binaryPathPubs))
                         .findFirst()
                         .orElse(null);
 
                 if (selectedKey != null) {
-                    encryptedKeyMap.put(publisherID, Collections.singletonList(selectedKey));
-//                    System.out.println("🔑 Selected Key for num=" + num + ": " + selectedKey);
+                    encryptedKeyMap.put(publisherID, selectedKey);
                 }
+            }
 
-                // Find the deepest key within the subscriber range
+            // Process subscriber key
+            if (!subscriberKeyMap.containsKey(subscriberInfo.getFirst())) {
                 TupleDe<String, String> deepestKey = null;
                 int maxDepth = -1;
+                for (TupleDe<Integer, Integer> range : existingAttributes) {
+                    int minValue = range.getFirst();
+                    int maxValue = range.getSecond();
+                    List<TupleDe<String, String>> keyList = new ArrayList<>();
+                    encryptTreeNodes(0, getNearestPowerOfTwo(maxValue) - 1, keyManager.generateRootKey(num), "", 1, keyList);
 
-                for (int i = minValue; i <= maxValue; i++) {
-                    String binaryPathSubs = Integer.toBinaryString(i);
-
-                    // DFS to find the deepest key
-                    for (TupleDe<String, String> keyTuple : keyList) {
-                        if (keyTuple.getFirst().equals(binaryPathSubs)) {
-                            int currentDepth = binaryPathSubs.length(); // Binary length = depth
-                            if (currentDepth > maxDepth) {
-                                maxDepth = currentDepth;
-                                deepestKey = keyTuple;
+                    for (int i = minValue; i <= maxValue; i++) {
+                        String binaryPathSubs = Integer.toBinaryString(i);
+                        for (TupleDe<String, String> keyTuple : keyList) {
+                            if (keyTuple.getFirst().equals(binaryPathSubs)) {
+                                int currentDepth = binaryPathSubs.length();
+                                if (currentDepth > maxDepth) {
+                                    maxDepth = currentDepth;
+                                    deepestKey = keyTuple;
+                                }
                             }
                         }
                     }
                 }
-
-                // Store only the deepest key in subscriberKeyMap
                 if (deepestKey != null) {
-                    subscriberKeyMap.put(subscriberInfo.getFirst(), Collections.singletonList(deepestKey));
-//                    System.out.println("🔑 Selected Deepest Key for subscriber range [" + minValue + " - " + maxValue + "]: " + deepestKey);
+                    subscriberKeyMap.put(subscriberInfo.getFirst(), deepestKey);
                 }
             }
-//            System.out.println("✅ NAKT Build Completed for: " + subscriberInfo.getFirst() + "\n");
         }
-        return  true;
+        return true;
     }
 
     /**
@@ -108,9 +98,9 @@ public class NAKTBuilder {
         keyList.add(new TupleDe<>(leftPath, leftKey));
         keyList.add(new TupleDe<>(rightPath, rightKey));
 
-        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
-        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
-        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);
+//        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
+//        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
+//        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);
 
         encryptTreeNodes(min, mid, leftKey, leftPath, depth + 1, keyList);
         encryptTreeNodes(mid + 1, max, rightKey, rightPath, depth + 1, keyList);
@@ -119,14 +109,14 @@ public class NAKTBuilder {
     /**
      * Retrieves the Map of keys for a publisher
      */
-    public Map<String, List<TupleDe<String, String>>>  getKeysForPublisher() {
+    public Map<String, TupleDe<String, String>> getKeysForPublisher() {
         return this.encryptedKeyMap;
     }
 
     /**
      * Retrieves the Map of keys for a subscriber based on its ID.
      */
-    public Map<String, List<TupleDe<String, String>>>  getKeysForSubscriber() {
+    public Map<String, TupleDe<String, String>> getKeysForSubscriber() {
         return this.subscriberKeyMap;
     }
 

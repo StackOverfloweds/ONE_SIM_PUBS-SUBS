@@ -27,4 +27,7 @@ public class TupleDe<A, B> {
         return second;
     }
 
+    public boolean isEmpty() {
+        return first == null && second == null;
+    }
 }
