@@ -17,11 +17,12 @@ public class ContentRouter extends ActiveRouter {
 
     // create some initial variable
     public static final String MESSAGE_TOPICS_S = "topic";
+    // create sub topic
 
     protected Map<DTNHost, Double> startTimestamps;
     protected Map<DTNHost, List<Duration>> connHistory;
 
-    protected Map<Integer, List<TupleDe<List<Boolean>, String>>> registeredTopics;
+
 
     public ContentRouter(Settings s) {
         super(s);
@@ -34,43 +35,6 @@ public class ContentRouter extends ActiveRouter {
         super(c);
         startTimestamps = c.startTimestamps;
         connHistory = c.connHistory;
-    }
-
-    @Override
-    public boolean createNewMessage(Message msg) {
-        if (getHost().isPublisher() || getHost().isBroker() || getHost().isKDC()) {
-            if (getHost().isPublisher()) {
-                makeRoomForMessage(msg.getSize());
-
-                msg.setTtl(this.msgTtl);
-                Map<Integer, TupleDe<List<Boolean>, String>> topic = new HashMap<>();  // Initialize the topic map
-                List<Boolean> topicList = new ArrayList<>();  // Create a list to store topic values
-
-                int i = 0;
-                while (i < 5) {  // Limit the size to 5 for topics
-                    topicList.add(Math.random() < 0.5);  // Add random boolean value for topic
-                    i++;
-                }
-                int subTopic = new Random().nextInt(10);  // Generate a random sub-topic
-
-                // Create a TupleDe to store topic list and associated publisher ID
-                String publisherId = String.valueOf(getHost().getRouter().getHost());  // Assuming the host's ID can represent the publisher's ID
-                TupleDe<List<Boolean>, String> tuple = new TupleDe<>(topicList, publisherId);
-
-                // Put the tuple in the topic map
-                topic.put(subTopic, tuple);
-
-                // Send the topic map to the broker for registration
-                if (!topic.isEmpty()) {
-                    if (sendToBrokerForRegistration(topic)) {
-                        return true;
-                    }
-                }
-            }
-
-            return super.createNewMessage(msg);  // Call the superclass method to handle the message creation
-        }
-        return false;  // Return false if the host is not a publisher
     }
 
 
@@ -146,195 +110,6 @@ public class ContentRouter extends ActiveRouter {
         return aMessage;
     }
 
-
-    private boolean sendToBrokerForRegistration(Map<Integer, TupleDe<List<Boolean>, String>> topicMap) {
-        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
-
-        if (topicMap == null || topicMap.isEmpty()) {
-            System.err.println("No topics found in the map for registration.");
-            return false;
-        }
-
-        // Validate the topic map
-        for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
-            TupleDe<List<Boolean>, String> tuple = entry.getValue();
-            if (tuple == null || tuple.getFirst() == null || tuple.getSecond() == null) {
-                System.err.println("Invalid tuple for topic " + entry.getKey());
-                return false; // Return false immediately if an invalid tuple is found
-            }
-        }
-
-        boolean brokerRegistered = false;
-
-        // Find the broker and forward the topic map
-        for (DTNHost host : allHosts) {
-            if (host.isBroker() && host.getRouter() instanceof ContentRouter) {
-                ContentRouter brokerRouter = (ContentRouter) host.getRouter();
-
-                // Forward the topic map to the broker
-                if (brokerRouter.addTopicRegistration(topicMap)) {
-                    brokerRegistered = true;
-
-                    // Forward the topic map to the KDC
-                    if (forwardToKDC(topicMap, host)) {
-//                        System.out.println("Topic registration forwarded to KDC by broker: " + host);
-                    } else {
-//                        System.err.println("Failed to forward topic registration to KDC.");
-                    }
-                }
-            }
-        }
-
-        if (!brokerRegistered) {
-//            System.err.println("No available broker to handle the registration.");
-            return false;
-        }
-        return true;
-    }
-
-    public boolean addTopicRegistration(Map<Integer, TupleDe<List<Boolean>, String>> topicMap) {
-        if (topicMap == null || topicMap.isEmpty()) {
-            return false;
-        }
-
-        // Store the topic registration in the broker's registeredTopics map
-        if (registeredTopics == null) {
-            registeredTopics = new HashMap<>();
-        }
-
-        for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
-            int subTopic = entry.getKey();
-            TupleDe<List<Boolean>, String> tuple = entry.getValue();
-
-            if (!registeredTopics.containsKey(subTopic)) {
-                registeredTopics.put(subTopic, new ArrayList<>());
-            }
-            registeredTopics.get(subTopic).add(tuple);
-        }
-
-//        System.out.println("Topic registration added to broker: " + topicMap);
-        return true;
-    }
-
-    private boolean forwardToKDC(Map<Integer, TupleDe<List<Boolean>, String>> topicMap, DTNHost broker) {
-        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
-
-        // Find the KDC
-        for (DTNHost host : allHosts) {
-            if (host.isKDC() && host.getRouter() instanceof ContentRouter) {
-                ContentRouter kdcRouter = (ContentRouter) host.getRouter();
-
-                // Forward the topic map to the KDC
-                if (kdcRouter.processTopicRegistrationAtKDC(topicMap)) {
-//                    System.out.println("Topic registration forwarded to KDC: " + host);
-                    return true;
-                }
-            }
-        }
-
-//        System.err.println("No available KDC to handle the registration.");
-        return false;
-    }
-
-    private boolean processTopicRegistrationAtKDC(Map<Integer, TupleDe<List<Boolean>, String>> topicMap) {
-        if (topicMap == null || topicMap.isEmpty()) {
-            System.err.println("No topics found in the map for registration.");
-            return false;
-        }
-
-        // Validate the topic map
-        for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
-            TupleDe<List<Boolean>, String> tuple = entry.getValue();
-            if (tuple == null || tuple.getFirst() == null || tuple.getSecond() == null) {
-                System.err.println("Invalid tuple for topic " + entry.getKey());
-                return false; // Return false immediately if an invalid tuple is found
-            }
-        }
-
-        // Store the topic information in the registeredTopics map
-        if (registeredTopics == null) {
-            registeredTopics = new HashMap<>();
-        }
-
-        for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
-            int subTopic = entry.getKey();
-            TupleDe<List<Boolean>, String> tuple = entry.getValue();
-
-            if (!registeredTopics.containsKey(subTopic)) {
-                registeredTopics.put(subTopic, new ArrayList<>());
-            }
-            registeredTopics.get(subTopic).add(tuple);
-        }
-
-//        System.out.println("Topic registration processed at KDC: " + topicMap);
-        return true;
-    }
-
-
-//    private Boolean isFinalDest(Message m, DTNHost host) {
-//        // Get the topics from the message
-//        @SuppressWarnings("unchecked")
-//        Map<Integer, TupleDe<List<Boolean>, String>> topicMap;
-//        try {
-//            topicMap = (Map<Integer, TupleDe<List<Boolean>, String>>) m.getProperty(MESSAGE_TOPICS_S);
-//        } catch (ClassCastException e) {
-//            System.out.println("Error: MESSAGE_TOPICS_S property is not of type Map<Integer, TupleDe<List<Boolean>, String>>.");
-//            return false;
-//        }
-//
-//        if (topicMap == null || topicMap.isEmpty()) {
-//            return false;
-//        }
-//
-//        // Ensure both lists have the same size
-//        List<Double> subscriberInterests = host.getInterest();
-//        if (topicMap.size() != subscriberInterests.size()) {
-//            System.out.println("Mismatch in size of message topics and host interests");
-//            return false;
-//        }
-//
-//        // If host is a broker, determine relevant subscribers
-//        if (host.isBroker()) {
-//            List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
-//            for (DTNHost potentialSubscriber : allHosts) {
-//                if (potentialSubscriber.isSubscriber() && potentialSubscriber.getRouter() instanceof ContentRouter) {
-//                    ContentRouter subscriberRouter = (ContentRouter) potentialSubscriber.getRouter();
-//
-//                    // Check if the subscriber has matching interests
-//                    if (isFinalDestForSubscriber(m, potentialSubscriber)) {
-//                        subscriberRouter.addToMessages(m, false); // Forward message to subscriber
-//                        System.out.println("Broker " + host + " sent message " + m.getId() + " to subscriber " + potentialSubscriber);
-//                    }
-//                }
-//            }
-//            return false; // Broker is not a final destination
-//        }
-//
-//        // If host is a subscriber, check if it's the final destination
-//        boolean isFinal = isFinalDestForSubscriber(m, host);
-//
-//        if (!isFinal) {
-//            System.out.println("Subscriber " + host + " ignored message " + m.getId() + " due to no matching interest.");
-//            return false;
-//        }
-//
-//        return isFinal; // Return true if the subscriber is the final destination
-//    }
-
-    // Helper method to check if a subscriber matches the message's topics
-    private Boolean isFinalDestForSubscriber(Message m, DTNHost subscriber) {
-        @SuppressWarnings("unchecked") List<Boolean> messageTopics = (List<Boolean>) m.getProperty(MESSAGE_TOPICS_S);
-        List<Double> subscriberInterests = subscriber.getInterest();
-
-        // Check if there's any match between the message's topics and the subscriber's interests
-        for (int i = 0; i < messageTopics.size(); i++) {
-            if (messageTopics.get(i) && subscriberInterests.get(i) > 0) {
-                return true; // Found a match
-            }
-        }
-        return false; // No match found
-    }
-
     protected boolean isSameInterest(Message m, DTNHost host) {
         // Get the topics from the message
         @SuppressWarnings("unchecked")
@@ -346,7 +121,6 @@ public class ContentRouter extends ActiveRouter {
                 if (entry.getValue() instanceof List<?>) {
                     topicMap.put(entry.getKey(), (List<TupleDe<Integer, Integer>>) entry.getValue());
                 } else {
-                    System.err.println("Invalid entry in the subscription map for key: " + entry.getKey());
                     return false;
                 }
             }
@@ -445,6 +219,7 @@ public class ContentRouter extends ActiveRouter {
     @Override
     public void update() {
         super.update();
+//        System.out.println("update 1");
 
         if (isTransferring() || !canStartTransfer()) {
             return; // transferring, don't try other connections yet
@@ -458,12 +233,6 @@ public class ContentRouter extends ActiveRouter {
         // then try any/all message to any/all connection
         this.tryAllMessagesToAllConnections();
     }
-
-    public Map<Integer, List<TupleDe<List<Boolean>, String>>> getRegisteredTopics() {
-        return registeredTopics;
-    }
-
-
 
 
 
