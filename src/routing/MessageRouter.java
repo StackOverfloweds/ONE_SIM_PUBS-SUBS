@@ -315,7 +315,7 @@ public abstract class MessageRouter {
      *
      * @return The host object
      */
-    protected DTNHost getHost() {
+    public DTNHost getHost() {
         return this.host;
     }
 

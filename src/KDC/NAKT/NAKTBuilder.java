@@ -108,9 +108,9 @@ public class NAKTBuilder {
         keyList.add(new TupleDe<>(leftPath, leftKey));
         keyList.add(new TupleDe<>(rightPath, rightKey));
 
-//        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
-//        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
-//        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);
+        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
+        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
+        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);
 
         encryptTreeNodes(min, mid, leftKey, leftPath, depth + 1, keyList);
         encryptTreeNodes(mid + 1, max, rightKey, rightPath, depth + 1, keyList);
