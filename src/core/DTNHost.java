@@ -62,6 +62,14 @@ public class DTNHost implements Comparable<DTNHost> {
     private List<TupleDe<Integer, Integer>> numericAtribute; //min max atribute value of int
     private List<Integer> numericAtribute2;
 
+    // create variable for publsiher
+    private boolean topicValue;
+    private int subTopicValue ;
+
+    // Variabel flag untuk memastikan hanya satu topik yang diberikan
+    private boolean isTopicAssigned = false;
+
+
     static {
         DTNSim.registerForReset(DTNHost.class.getCanonicalName());
         reset();
@@ -112,46 +120,44 @@ public class DTNHost implements Comparable<DTNHost> {
             // Jika GroupID tidak sesuai dengan peran yang ditentukan
             throw new IllegalArgumentException("Invalid GroupID: " + groupId);
         }
-
+        Random random = new Random();
         // create subscriber interest for something random
         if (isSubscriber) {
-            Random random = new Random();
-            ownInterest = new ArrayList<Boolean>();
-            interest = new ArrayList<Double>();
-            numericAtribute = new ArrayList<TupleDe<Integer, Integer>>(); // for sub topic with 2 value min max value
-            numericAtribute2 = new ArrayList<Integer>(); // for sub topic with 1 value
+            ownInterest = new ArrayList<>();
+            interest = new ArrayList<>();
+            numericAtribute = new ArrayList<>();
+            numericAtribute2 = new ArrayList<>();
 
-            // just set random value
-            int index = 0;
-
-            // looping
-            while (index < 5) { // 5 is the interest topic
-
-                // if the interest is 0.5 then used ownInterest
-                if (random.nextDouble() < 0.5) { // 0.5 value index to set true for own interest
-                    interest.add(0.5);
-
-                    // randomly choose to use numericAtribute for two values or one value
-                    if (random.nextBoolean()) {
-                        // Numeric attribute with two values (min, max)
-                        int min = random.nextInt(11); // Generate random min value between 0 and 10
-                        int max = random.nextInt(11 - min) + min; // Generate max value between min and 10
-                        numericAtribute.add(new TupleDe<>(min, max));
-                    } else {
-                        // Numeric attribute with one value
-                        numericAtribute2.add(random.nextInt(11)); // Generate a random value between 0 and 10
-                    }
-
-                    ownInterest.add(true);
-                } else {
-                    interest.add(0.0);
-                    numericAtribute.add(new TupleDe<>(0, 0));
-                    numericAtribute2.add(null); // Add null for single value attribute
-                    ownInterest.add(false);
-                }
-                index++;
+            // Randomly choose to use numericAtribute for two values or default (0,0)
+            if (random.nextBoolean()) {
+                int min = random.nextInt(30); // Generate random min value between 0 and 30
+                int max = random.nextInt(30 - min) + min; // Generate max value between min and 30
+                numericAtribute.add(new TupleDe<>(min, max));
+            } else {
+                numericAtribute.add(new TupleDe<>(0, 0));
             }
 
+            // Randomly decide if numericAtribute2 should have a value or be null
+            if (random.nextBoolean()) {
+                numericAtribute2.add(random.nextInt(30)); // Random value between 0 and 29
+            } else {
+                numericAtribute2.add(null); // Set to null randomly
+            }
+
+            // Randomly set ownInterest and interest
+            boolean isInterested = random.nextBoolean();
+            ownInterest.add(isInterested);
+            interest.add(isInterested ? 0.5 : 0.0);
+        }
+
+
+
+        // we gonna create some topic and sub topic for each pulisher
+        // Ensure a single topicValue and subTopicValue for each publisher
+        if (isPublisher && !isTopicAssigned) {
+            this.topicValue = random.nextBoolean();
+            this.subTopicValue = random.nextInt(29) + 1;
+            this.isTopicAssigned = true;
         }
 
         for (NetworkInterface i : interf) {
@@ -678,19 +684,27 @@ public class DTNHost implements Comparable<DTNHost> {
     }
 
     public List<Double> getInterest() {
-        return interest;
+        return this.interest;
     }
 
     public List<Boolean> getOwnInterest() {
-        return ownInterest;
+        return this.ownInterest;
     }
 
     public List<TupleDe<Integer, Integer>> getNumericAtribute() {
-        return numericAtribute;
+        return this.numericAtribute;
     }
 
     public List<Integer> getNumericAtribute2() {
-        return numericAtribute2;
+        return this.numericAtribute2;
+    }
+
+    public int getSubTopic() {
+        return this.subTopicValue;
+    }
+
+    public boolean getTopicValue () {
+        return this.topicValue;
     }
 
 

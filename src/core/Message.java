@@ -99,6 +99,15 @@ public class Message implements Comparable<Message> {
 	}
 
 	/**
+	 * Sets the recipient of this message.
+	 * @param to The new recipient of the message
+	 */
+	public void setTo(DTNHost to) {
+		this.to = to;
+	}
+
+
+	/**
 	 * Returns the ID of the message
 	 * @return The message id
 	 */
