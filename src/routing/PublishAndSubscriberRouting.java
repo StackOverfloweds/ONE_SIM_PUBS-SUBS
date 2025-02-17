@@ -5,25 +5,27 @@
  *
  */
 package routing;
+
 import KDC.Publisher.BrokerRegistrationHandler;
 import KDC.Publisher.EncryptionUtil;
 import KDC.Publisher.KDCRegistrationProcessor;
 import KDC.Subscriber.BrokerHandler;
+import KDC.Subscriber.DecryptUtil;
 import KDC.Subscriber.SubscriptionManager;
 import core.*;
 import routing.util.TupleDe;
+
 import java.util.*;
 
 
-public class PublishAndSubscriberRouting extends ContentRouter {
+public class PublishAndSubscriberRouting extends CCDTN {
 
     public static Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics; // key for the topic and id of subscriber, value is for list of numeric atribute
     public static Map<Integer, List<TupleDe<Boolean, String>>> registeredTopics;
-    public static Map<String, List<TupleDe<String, String>>> keyEncryption;
-    public static Map<String, List<TupleDe<String, String>>> keyAuthentication;
-
-
+    public static Map<String, TupleDe<String, String>> keyEncryption;
+    public static Map<String, TupleDe<String, String>> keyAuthentication;
     public static int lcnum;
+
     private boolean topicVall;
     private int subTopicVall;
 
@@ -41,40 +43,51 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         super(s);
         Settings ccSettings = new Settings(PUBSROUTING_NS);
         lcnum = ccSettings.getInt(LCNUM);
-        subscribedTopics = new HashMap<>();
-
+        // Ensure keyEncryption is initialized
         if (keyEncryption == null) {
             keyEncryption = new HashMap<>();
         } else {
-            keyEncryption =brokerHandler.getKeyEncryption();
-            for (Map.Entry<String, List<TupleDe<String, String>>> entry : keyEncryption.entrySet()) {
-                List<TupleDe<String, String>> values = entry.getValue();
-                keyEncryption.put(entry.getKey(), values);
+            keyEncryption = brokerHandler.getKeyEncryption();
+            for (Map.Entry<String, TupleDe<String, String>> entry : keyEncryption.entrySet()) {
+                keyEncryption.put(entry.getKey(), entry.getValue());  // Deep copy to avoid reference issues
             }
         }
 
-        // for key Auth
-        if (keyAuthentication == null) {
-            keyAuthentication = new HashMap<>();
-        } else {
-            keyAuthentication =brokerHandler.getKeyAuthentication();
-
-            for (Map.Entry<String, List<TupleDe<String, String>>> entry : keyAuthentication.entrySet()) {
-                List<TupleDe<String, String>> values = entry.getValue();
-                keyEncryption.put(entry.getKey(), values);
-            }
-        }
-
+        // Initialize registeredTopics with a deep copy if needed
         registeredTopics = processor.getRegisteredTopics();
-
         if (registeredTopics == null) {
             registeredTopics = new HashMap<>();
         } else {
-            registeredTopics = processor.getRegisteredTopics();
-
             for (Map.Entry<Integer, List<TupleDe<Boolean, String>>> entry : registeredTopics.entrySet()) {
                 List<TupleDe<Boolean, String>> list = entry.getValue();
-                registeredTopics.put(entry.getKey(), list);
+                registeredTopics.put(entry.getKey(), new ArrayList<>(list));  // Deep copy of the list
+            }
+        }
+
+        // Handle subscribedTopics with deep copy logic if it's not null
+        if (subscribedTopics == null) {
+            subscribedTopics = new HashMap<>();
+        } else {
+            subscribedTopics = brokerHandler.getSubscribedTopics();
+            for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> entry : subscribedTopics.entrySet()) {
+                // You should add the processing logic here for subscribedTopics if necessary
+                // For example, deep copying the values of subscribedTopics if needed:
+                TupleDe<String, List<Boolean>> key = entry.getKey();
+                List<TupleDe<Integer, Integer>> value = entry.getValue();
+                subscribedTopics.put(key, new ArrayList<>(value));  // Deep copy the list
+            }
+        }
+
+        // Initialize keyAuthentication map
+        if (keyAuthentication == null) {
+            keyAuthentication = new HashMap<>();
+        }
+
+        // Ensure deep copy of keyAuthentication from brokerHandler if needed
+        Map<String, TupleDe<String, String>> tempKeyAuth = brokerHandler.getKeyAuthentication();
+        if (tempKeyAuth != null) {
+            for (Map.Entry<String, TupleDe<String, String>> entry : tempKeyAuth.entrySet()) { // Deep copy the list
+                keyAuthentication.put(entry.getKey(), entry.getValue());
             }
         }
     }
@@ -83,23 +96,53 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         // Call the superclass copy constructor
         super(r);
         lcnum = r.lcnum;
-        subscribedTopics = new HashMap<>(r.subscribedTopics);
-        keyEncryption = new HashMap<>(r.keyEncryption);
-        keyAuthentication = new HashMap<>(r.keyAuthentication);
+
+        // Handle keyEncryption copy similarly
+        if (r.keyEncryption == null) {
+            keyEncryption = new HashMap<>();
+        } else {
+            keyEncryption = new HashMap<>(r.keyEncryption);
+            for (Map.Entry<String, TupleDe<String, String>> entry : keyEncryption.entrySet()) {
+                keyEncryption.put(entry.getKey(), entry.getValue());  // Deep copy values
+            }
+        }
 
         // Initialize registeredTopics as a new HashMap if it is null in the original object
         if (r.registeredTopics == null) {
             registeredTopics = new HashMap<>();
         } else {
             registeredTopics = new HashMap<>(r.registeredTopics);
-
-            // Copy each entry in registeredTopics to the new map
+            // Deep copy each list inside registeredTopics
             for (Map.Entry<Integer, List<TupleDe<Boolean, String>>> entry : r.registeredTopics.entrySet()) {
                 List<TupleDe<Boolean, String>> valueCopy = new ArrayList<>(entry.getValue());
                 registeredTopics.put(entry.getKey(), valueCopy);
             }
         }
+
+        // Handle subscribedTopics copying
+        if (r.subscribedTopics == null) {
+            subscribedTopics = new HashMap<>();
+        } else {
+            subscribedTopics = new HashMap<>(r.subscribedTopics);
+            // Deep copy the values for subscribedTopics
+            for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> entry : r.subscribedTopics.entrySet()) {
+                List<TupleDe<Integer, Integer>> valueCopy = new ArrayList<>(entry.getValue());
+                subscribedTopics.put(entry.getKey(), valueCopy);
+            }
+        }
+
+        // Initialize keyAuthentication map
+        if (r.keyAuthentication == null) {
+            keyAuthentication = new HashMap<>();
+        } else {
+            keyAuthentication = new HashMap<>();
+            // Deep copy of keyAuthentication
+            for (Map.Entry<String, TupleDe<String, String>> entry : r.keyAuthentication.entrySet()) {
+                keyAuthentication.put(entry.getKey(), entry.getValue());
+            }
+        }
     }
+
 
     @Override
     public void changedConnection(Connection con) {
@@ -118,11 +161,6 @@ public class PublishAndSubscriberRouting extends ContentRouter {
         }
     }
 
-    protected Map<Integer, List<TupleDe<Boolean, String>>> getRegisteredTopics() {
-        // Ensure we return an empty map instead of null
-        return this.registeredTopics != null ? this.registeredTopics : new HashMap<>();
-    }
-
     @Override
     public boolean createNewMessage(Message msg) {
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
@@ -139,7 +177,7 @@ public class PublishAndSubscriberRouting extends ContentRouter {
                 continue;  // Lewati jika tidak cocok
             }
 
-            List<TupleDe<String, String>> keys = keyEncryption.get(hostId);
+            TupleDe<String, String> keys = keyEncryption.get(hostId);
 
             if (keys == null || keys.isEmpty()) {  // Pastikan list tidak kosong
                 continue;
@@ -150,30 +188,149 @@ public class PublishAndSubscriberRouting extends ContentRouter {
                 topicVall = host.getTopicValue();
                 subTopicVall = host.getSubTopic();
             }
-//
-            System.out.println("topicVall: " + topicVall);
-            System.out.println("subTopicVall: " + subTopicVall);
+
+            if (subTopicVall <= 0) {
+                return false;
+            }
+
+//            System.out.println("topicVall = " + topicVall);
+//            System.out.println("subTopicVall = " + subTopicVall);
 
             String randomMessage = EncryptionUtil.generateRandomString(20); // 20 karakter
+            System.out.println("check random msg "+randomMessage);
 
-            String keyEncrypt = keys.get(0).getSecond(); // Gunakan key dari Tuple
+            String keyEncrypt = keys.getSecond(); // Gunakan key dari Tuple
 
             String hashedMessage = EncryptionUtil.hashWithHmacSHA256(randomMessage, keyEncrypt);
 
-            Map<String, Object> messageData = new HashMap<>();
-            messageData.put("topic", topicVall);
-            messageData.put("subTopic", subTopicVall);
-            messageData.put("msg", hashedMessage);
+            Map<Boolean, TupleDe<Integer, String>> messageData = new HashMap<>();
+            TupleDe<Integer, String> value = new TupleDe<>(subTopicVall, hashedMessage);
+            messageData.put(topicVall, value);
 
             // **5. Tambahkan ke properti message**
             makeRoomForMessage(msg.getSize());
             msg.setTtl(this.msgTtl);
             msg.addProperty(MESSAGE_TOPICS_S, messageData);
-            System.out.println("Success to send message : " + msg.getProperty(MESSAGE_TOPICS_S));
+            addToMessages(msg, true);
+//            System.out.println("Success to send message : " + msg.getProperty(MESSAGE_TOPICS_S));
             return super.createNewMessage(msg);
         }
         return false;
     }
+
+    /**
+     * metode in routing publishAndSubscriberRouting
+     *
+     * @param id   Id of the transferred message
+     * @param from Host the message was from (previous hop)
+     * @return
+     */
+    @Override
+    public Message messageTransferred(String id, DTNHost from) {
+        Message incoming = removeFromIncomingBuffer(id, from);
+        if (incoming == null) {
+            throw new SimError("No message found with ID " + id + " in the incoming buffer.");
+        }
+
+        if (keyAuthentication == null || keyAuthentication.isEmpty()) {
+            return null;
+        }
+
+        Message outgoing = incoming;
+        for (Application app : getApplications(incoming.getAppID())) {
+            outgoing = app.handle(outgoing, getHost());
+            if (outgoing == null) {
+                break; // Pesan dihentikan oleh aplikasi
+            }
+        }
+
+        Message aMessage = (outgoing == null) ? incoming : outgoing;
+        boolean isFinalRecipient = isFinalDest(aMessage, getHost());
+        boolean isFirstDelivery = isFinalRecipient && !isDeliveredMessage(aMessage);
+
+        if (aMessage != null && !isFinalRecipient) {
+            addToMessages(aMessage, false);
+        }
+
+        if (isFirstDelivery) {
+            this.deliveredMessages.put(id, aMessage);
+        }
+
+        for (MessageListener ml : this.mListeners) {
+            ml.messageTransferred(aMessage, from, getHost(), isFirstDelivery);
+        }
+
+        // Mengecek Topic dan Key Authentication
+        Message msg = aMessage;
+        Map<Boolean, TupleDe<Integer, String>> topicMap = getTopicMap(msg);
+
+        if (topicMap == null) {
+            return null;
+        }
+
+        List<Boolean> ownInterest = getHost().getOwnInterest();
+        if (ownInterest == null || ownInterest.isEmpty()) {
+            return null;
+        }
+
+        // Loop melalui topicMap dan bandingkan hanya boolean
+        for (Map.Entry<Boolean, TupleDe<Integer, String>> entry : topicMap.entrySet()) {
+            Boolean topicBoolean = entry.getKey();
+            String topicName = entry.getValue().getSecond();
+
+            if (ownInterest.contains(topicBoolean)) {
+                boolean isSubscriberMatched = authenticateSubscriber(from, topicName);
+                if (isSubscriberMatched) {
+                    addToMessages(msg, true);
+                    System.out.println("Message added to subscriber buffer.");
+                    return aMessage;
+                } else {
+                    System.out.println("No matching subscriber found for decryption.");
+                    return null;
+                }
+            } else {
+                System.out.println("No matching interest found for topic: " + topicName);
+                return null;
+            }
+        }
+
+        return aMessage;
+    }
+
+    private Map<Boolean, TupleDe<Integer, String>> getTopicMap(Message msg) {
+        try {
+            return (Map<Boolean, TupleDe<Integer, String>>) msg.getProperty(MESSAGE_TOPICS_S);
+        } catch (ClassCastException e) {
+            System.out.println("Error: MESSAGE_TOPICS_S property is not valid.");
+            return null;
+        }
+    }
+
+    private boolean authenticateSubscriber(DTNHost from, String topicName) {
+        for (Map.Entry<String, TupleDe<String, String>> entry : keyAuthentication.entrySet()) {
+            String subscriberId = entry.getKey();
+            String topicKey = entry.getValue().getFirst();
+
+            if (startTimestamps.containsKey(from) && connHistory.containsKey(from)) {
+                for (DTNHost getSub : SimScenario.getInstance().getHosts()) {
+                    String hostId = String.valueOf(getSub.getRouter().getHost());
+                    if (getSub.isSubscriber() && getHost().getRouter() instanceof PublishAndSubscriberRouting) {
+                        if (subscriberId.contains(hostId)) {
+                            String decryptedContent = DecryptUtil.decryptHMAC5(topicName, topicKey);
+                            if (decryptedContent != null) {
+                                System.out.println("Decryption Success: " + decryptedContent);
+                                return true;
+                            } else {
+                                System.out.println("Decryption Failed.");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
 
 
     /**

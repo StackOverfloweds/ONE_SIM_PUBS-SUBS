@@ -4,6 +4,7 @@ import KDC.NAKT.NAKTBuilder;
 import KDC.Publisher.KDCRegistrationProcessor;
 import core.DTNHost;
 import core.SimScenario;
+import routing.CCDTN;
 import routing.PublishAndSubscriberRouting;
 import routing.util.TupleDe;
 
@@ -14,8 +15,8 @@ import java.util.HashMap;
 
 public class BrokerHandler {
     private Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics = PublishAndSubscriberRouting.subscribedTopics;
-    private Map<String, List<TupleDe<String, String>>> keyEncryption = PublishAndSubscriberRouting.keyEncryption;
-    private Map<String, List<TupleDe<String, String>>> keyAuthentication = PublishAndSubscriberRouting.keyAuthentication;
+    private Map<String, TupleDe<String, String>> keyEncryption = PublishAndSubscriberRouting.keyEncryption;
+    private Map<String, TupleDe<String, String>> keyAuthentication = PublishAndSubscriberRouting.keyAuthentication;
     private int lcnum = PublishAndSubscriberRouting.lcnum;
 
     public KDCRegistrationProcessor processor = new KDCRegistrationProcessor();
@@ -116,30 +117,28 @@ public class BrokerHandler {
             // Jika sukses subscribe, buat NAKT
             NAKTBuilder nakt = new NAKTBuilder(lcnum);
             if (nakt.buildNAKT(subscriberTopicMap, existingAttributes)) {
-                Map<String, List<TupleDe<String, String>>> publisherKeys = nakt.getKeysForPublisher();
-                Map<String, List<TupleDe<String, String>>> subscriberKeys = nakt.getKeysForSubscriber();
+                Map<String, TupleDe<String, String>> publisherKeys = nakt.getKeysForPublisher();
+                Map<String, TupleDe<String, String>> subscriberKeys = nakt.getKeysForSubscriber();
 
                 // Pastikan tidak null & tidak kosong sebelum diproses
                 if (publisherKeys != null && !publisherKeys.isEmpty()) {
-                    for (Map.Entry<String, List<TupleDe<String, String>>> entryKey : publisherKeys.entrySet()) {
-                        if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
+                    for (Map.Entry<String, TupleDe<String, String>> entryKey : publisherKeys.entrySet()) {
+                        if (entryKey.getValue() != null && !entry.getValue().isEmpty()) {
                             // Pastikan key sudah ada, jika belum buat list baru
                             if (!keyEncryption.containsKey(entryKey.getKey())) {
-                                keyEncryption.put(entryKey.getKey(), new ArrayList<>());
-                            }
-
-                            // Tambahkan elemen satu per satu
-                            for (TupleDe<String, String> key : entryKey.getValue()) {
-                                keyEncryption.get(entryKey.getKey()).add(key);
+                                keyEncryption.put(entryKey.getKey(), entryKey.getValue());
                             }
                         }
                     }
                 }
 
                 if (subscriberKeys != null && !subscriberKeys.isEmpty()) {
-                    for (Map.Entry<String, List<TupleDe<String, String>>> entryKey : subscriberKeys.entrySet()) {
-                        if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
-                            // Process subscriber keys if needed
+                    for (Map.Entry<String, TupleDe<String, String>> entryKey : subscriberKeys.entrySet()) {
+                        if (entryKey.getValue() != null && !entry.getValue().isEmpty()) {
+                            if (!keyAuthentication.containsKey(entryKey.getKey())) {
+                                keyAuthentication.put(entryKey.getKey(), entryKey.getValue());
+                            }
+
                         }
                     }
                 }
@@ -152,11 +151,11 @@ public class BrokerHandler {
         return subscribedTopics;
     }
 
-    public Map<String, List<TupleDe<String, String>>> getKeyEncryption () {
+    public Map<String, TupleDe<String, String>> getKeyEncryption () {
         return keyEncryption;
     }
 
-    public Map<String, List<TupleDe<String, String>>> getKeyAuthentication() {
+    public Map<String, TupleDe<String, String>> getKeyAuthentication() {
         return keyAuthentication;
     }
 
