@@ -1,8 +1,13 @@
 # Scenario settings
-Scenario.name = PUBS_SUBS
-Scenario.simulateConnections = true
+Scenario.name = PUBS_SUBS_Haggle
+Scenario.simulateConnections = false
 Scenario.updateInterval = 0.1
-Scenario.endTime = 86400
+# 43200s == 12h
+#Scenario.endTime = 43200
+Scenario.endTime = 274883
+
+# 16981816 Reality 8490908
+# 274883 Haggle 3 Infocom 5
 
 # Interface-specific settings
 btInterface.type = SimpleBroadcastInterface
@@ -23,71 +28,101 @@ Group.movementModel = RandomWalk
 Group.router = PublishAndSubscriberRouting
 PublishAndSubscriberRouting.updateInterval = 300
 PublishAndSubscriberRouting.LCNUM = 4
-Group.bufferSize = 5M
+
+Group.bufferSize = 20M
+# 10M Haggle3 - Infocom5
+# 20M Reality
+
 Group.waitTime = 0, 120
+# All nodes have the bluetooth interface
 Group.nrofInterfaces = 1
 Group.interface1 = btInterface
+
+# Walking speeds
 Group.speed = 0.5, 1.5
-Group.msgTtl = 300
+# Message TTL of 300 minutes (5 hours)
+
+Group.msgTtl = 360
+#360 Haggle 3 infocom 5
+#10080 Reality 20160
 
 # Publisher Group (P) - Source of messages
 Group1.groupID = P
 Group1.movementModel = RandomWalk
-Group1.bufferSize = 15M
 Group1.waitTime = 0, 120
 Group1.speed = 0.5, 1.5
 Group1.interface1 = btInterface
 Group1.nrofInterfaces = 1
 Group1.msgTtl = 300
 Group1.router = PublishAndSubscriberRouting
-Group1.nrofHosts = 10
+Group1.nrofHosts = 30
 
 # Broker Group (B) - Message Forwarding
 Group2.groupID = B
 Group2.movementModel = RandomWalk
-Group2.bufferSize = 10M
 Group2.waitTime = 0, 60
 Group2.speed = 0.5, 1.5
 Group2.interface1 = btInterface
 Group2.nrofInterfaces = 1
 Group2.msgTtl = 300
 Group2.router = PublishAndSubscriberRouting
-Group2.nrofHosts = 6
+Group2.nrofHosts = 24
 
 # Subscriber Group (S) - Message Consumers
 Group3.groupID = S
 Group3.movementModel = RandomWalk
-Group3.bufferSize = 5M
 Group3.waitTime = 0, 60
 Group3.speed = 0.5, 1.5
 Group3.interface1 = btInterface
 Group3.nrofInterfaces = 1
 Group3.msgTtl = 300
 Group3.router = PublishAndSubscriberRouting
-Group3.nrofHosts = 20
+Group3.nrofHosts = 30
 
 # Key Distribution Center (KDC) - Manages Encryption Keys
 Group4.groupID = K
 Group4.movementModel = RandomStatic
-Group4.bufferSize = 20M
 Group4.waitTime = 0, 60
 Group4.interface1 = btInterface
 Group4.nrofInterfaces = 1
 Group4.msgTtl = 300
+Group4.nrofHosts = 14
 Group4.router = PublishAndSubscriberRouting
-Group4.nrofHosts = 4
 
-# Message creation parameters
-Events.nrof = 1
-Events1.class = MessageEventGenerator
-Events1.interval = 25,35
-Events1.size = 500k,1M
-Events1.hosts = 0,39
-Events1.prefix = M
+## Message creation parameters
+# How many event generators
+Events.nrof = 2
+# Class of the first event generator
+Events1.class = ExternalEventsQueue
+# (following settings are specific for the MessageEventGenerator class)
+# Creation interval in seconds (one new message every 25 to 35 seconds)
+Events1.filePath = ./conf/RealityConnectionTraceFinal.txt
+# Haggle3-Infocom5.csv
+# RealityConnectionTraceFinal.txt
+
+Events2.class = MessageEventGenerator
+# change interval to have more or less messages, see javadocs for more information.
+
+Events2.interval = 1160, 1240
+
+# 25,30 (~120 texts/hour)
+# 290, 310 (~12 texts/hour) Reality1
+# 580, 620 (~ 6 texts/hour)
+# 1160, 1240 (~ 3 texts/ hour) Haggle3 - Infocom5, Reality2
+# 2320, 2480 (~ 1 texts/ hour)
+
+Events2.size = 500k
+# range of message source/destination addresses
+Events2.hosts = 0,79
+Events2.prefix = M
+
+Events2.time = 0, 274883
+#274883 Haggle 3 infocom 5 253283
+#16981816 Reality 16377016 15772216
 
 # Movement model settings
 MovementModel.rngSeed = 1
-MovementModel.worldSize = 300, 300
+MovementModel.worldSize = 100, 100
 MovementModel.warmup = 1000
 
 
@@ -95,8 +130,6 @@ MovementModel.warmup = 1000
 MapBasedMovement.nrofMapFiles = 1
 
 MapBasedMovement.mapFile1 = data/roads.wkt
-
-
 
 # Reports
 Report.nrofReports = 1

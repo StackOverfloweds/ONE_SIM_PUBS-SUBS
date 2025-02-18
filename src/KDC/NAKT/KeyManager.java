@@ -29,7 +29,7 @@ public class KeyManager {
         return generateHMAC(parentKey, binaryPath);
     }
 
-    // Fungsi untuk menghasilkan HMAC
+    // Generate HMAC
     private String generateHMAC(String key, String message) {
         try {
             Mac mac = Mac.getInstance(HMAC_ALGO);

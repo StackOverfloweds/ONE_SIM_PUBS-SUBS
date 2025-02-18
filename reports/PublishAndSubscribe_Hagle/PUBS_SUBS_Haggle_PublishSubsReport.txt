@@ -1,21 +1,21 @@
 =====================================================
-Message Delivery Report for Scenario: PUBS_SUBS
-Simulation Time: 86400.0000
+Message Delivery Report for Scenario: PUBS_SUBS_Haggle
+Simulation Time: 274883.0000
 =====================================================
 
 === Basic Message Statistics ===
-Messages Created: 430
-Messages Started: 51122
-Messages Relayed: 2313
-Messages Aborted: 5508
-Messages Dropped: 1913
+Messages Created: 24
+Messages Started: 60319
+Messages Relayed: 2
+Messages Aborted: 25
+Messages Dropped: 7
 Messages Removed: 0
-Messages Delivered: 512
+Messages Delivered: 0
 
 === Delivery Metrics ===
-Delivery Probability: 1.1907
+Delivery Probability: 0.0000
 Response Success Probability: 0.0000
-Overhead Ratio: 3.5176
+Overhead Ratio: NaN
 =====================================================
 End of Report
 =====================================================
