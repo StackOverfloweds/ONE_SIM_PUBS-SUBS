@@ -7,6 +7,8 @@
 package routing;
 
 import KDC.Subscriber.BrokerHandler;
+import KDC.Subscriber.DecryptUtil;
+import com.sun.org.apache.xpath.internal.operations.Bool;
 import core.*;
 
 import java.util.*;
@@ -64,126 +66,87 @@ public class CCDTN extends ActiveRouter {
     }
 
 
-    protected Boolean isFinalDest(Message m, DTNHost host) {
-        // Get the topics from the message
-        @SuppressWarnings("unchecked")
-        Map<Boolean, TupleDe<Integer, String>> topicMap;
+    protected boolean isFinalDest(Message m, DTNHost host,  Map<String, TupleDe<String, String>> keyAuth) {
+        // Cek apakah host sudah subscribe ke final destination
+        Map<Boolean, TupleDe<Integer, String>> finalDestMap = getTopicMap(m);
 
+        if (finalDestMap == null || finalDestMap.isEmpty()) {
+            return false;
+        }
+
+        List<Boolean> hostTopicNode = host.getOwnInterest();
+        List<Double> hostWeightNode = host.getInterest();
+
+        if (hostTopicNode == null || hostWeightNode == null || hostTopicNode.size() != hostWeightNode.size()) {
+            return false;
+        }
+
+        for (Map.Entry<Boolean, TupleDe<Integer, String>> entry : finalDestMap.entrySet()) {
+            List<Boolean> topicMsg = new LinkedList<>();
+            topicMsg.add(entry.getKey());
+            TupleDe<Integer, String> topic = entry.getValue();
+            String getMsg = topic.getSecond();
+
+            for (Boolean top : topicMsg) {
+                // Cek apakah topik ini ada di hostTopicNode
+                if (hostTopicNode.contains(top)) {
+                    double weight = hostWeightNode.get(hostTopicNode.indexOf(entry.getKey()));
+                    if (weight > 0) { // Jika host sudah memiliki weight > 0 untuk topik ini
+                        boolean isSubscriberMatched = authenticateSubscriber(host, getMsg, keyAuth);
+                        if (isSubscriberMatched) return true;
+                        else {
+                            return false;
+                        }
+
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    protected boolean authenticateSubscriber(DTNHost from, String topicName, Map<String, TupleDe<String, String>> keyAuth) {
+        for (Map.Entry<String, TupleDe<String, String>> entry : keyAuth.entrySet()) {
+            String subscriberId = entry.getKey();
+            String topicKey = entry.getValue().getFirst();
+
+            if (startTimestamps.containsKey(from) && connHistory.containsKey(from)) {
+                for (DTNHost getSub : SimScenario.getInstance().getHosts()) {
+                    String hostId = String.valueOf(getSub.getRouter().getHost());
+                    if (getSub.isSubscriber() && getHost().getRouter() instanceof PublishAndSubscriberRouting) {
+                        if (subscriberId.contains(hostId)) {
+                            String decryptedContent = DecryptUtil.decryptHMAC5(topicName, topicKey);
+                            if (decryptedContent != null) {
+                                System.out.println("Decryption Success: " + decryptedContent);
+                                return true;
+                            } else {
+                                System.out.println("Decryption Failed.");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+
+
+    protected Map<Boolean, TupleDe<Integer, String>> getTopicMap(Message msg) {
         try {
-            topicMap = (Map<Boolean, TupleDe<Integer, String>>) m.getProperty(MESSAGE_TOPICS_S);
+            return (Map<Boolean, TupleDe<Integer, String>>) msg.getProperty(MESSAGE_TOPICS_S);
         } catch (ClassCastException e) {
             System.out.println("Error: MESSAGE_TOPICS_S property is not valid.");
             return null;
         }
-
-        if (topicMap == null || topicMap.isEmpty()) {
-            return null;
-        }
-
-        // Ensure both lists have the same size
-        List<Double> subscriberInterests = host.getInterest();
-        if (subscriberInterests == null) {
-            return false;
-        }
-//        System.out.println("Subscriber interests: " + subscriberInterests);
-//        System.out.println("topic map size : " + topicMap);
-            List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
-            for (DTNHost potentialSubscriber : allHosts) {
-                if (potentialSubscriber.isSubscriber() && potentialSubscriber.getRouter() instanceof CCDTN) {
-                    CCDTN subscriberRouter = (CCDTN) potentialSubscriber.getRouter();
-                    // Check if the subscriber has matching interests
-                    if (isFinalDestForSubscriber(m, potentialSubscriber)) {
-                        subscriberRouter.addToMessages(m, false); // Forward message to subscriber
-                    }
-                }
-            }
-
-        // If host is a subscriber, check if it's the final destination
-        boolean isFinal = isFinalDestForSubscriber(m, host);
-
-        if (!isFinal) {
-//            System.out.println("Subscriber " + host + " ignored message " + m.getId() + " due to no matching interest.");
-            return false;
-        }
-
-        return isFinal; // Return true if the subscriber is the final destination
     }
-
-
-    // Helper method to check if a subscriber matches the message's topics
-    private Boolean isFinalDestForSubscriber(Message m, DTNHost subscriber) {
-        Object property = m.getProperty(MESSAGE_TOPICS_S);
-
-        // Pastikan `property` memiliki tipe yang diharapkan sebelum casting
-        if (!(property instanceof Map)) {
-            System.out.println("Error: MESSAGE_TOPICS_S is not a Map.");
-            return false;
-        }
-
-        @SuppressWarnings("unchecked")
-        Map<Boolean, TupleDe<Integer, String>> topicMap = (Map<Boolean, TupleDe<Integer, String>>) property;
-
-        if (topicMap.isEmpty()) {
-            System.out.println("Error: topicMap is empty.");
-            return false;
-        }
-
-        // Ambil interest dari subscriber
-        List<Double> subscriberInterests = subscriber.getInterest();
-        if (subscriberInterests == null || subscriberInterests.isEmpty()) {
-            System.out.println("Error: Subscriber interests are null or empty.");
-            return false;
-        }
-
-        // Loop melalui setiap entry di topicMap
-        for (Map.Entry<Boolean, TupleDe<Integer, String>> entry : topicMap.entrySet()) {
-            Boolean topicStatus = entry.getKey(); // True/False menunjukkan apakah topik aktif
-            TupleDe<Integer, String> topicData = entry.getValue();
-            Integer topicID = topicData.getFirst();
-            String topicName = topicData.getSecond();
-            // Jika topik tidak aktif, lewati
-            if (!topicStatus) {
-                continue;
-            }
-
-            // Pastikan `topicID` ada dalam batas indeks subscriberInterests
-            if (topicID < 0 || topicID >= subscriberInterests.size()) {
-                continue;
-            }
-
-            // Cek apakah subscriber memiliki minat pada topik ini
-            if (subscriberInterests.get(topicID) > 0) {
-                System.out.println("Match found for subscriber " + subscriber.getAddress() + " on topic " + topicID);
-                return true; // Subscriber cocok dengan topik
-            }
-        }
-
-        return false; // Tidak ada kecocokan
-    }
-
-
-
-
-
 
     protected boolean isSameInterest(Message m, DTNHost host) {
         // Get the topics from the message
-        @SuppressWarnings("unchecked")
-        Map<TupleDe<String, String>, List<TupleDe<Integer, Integer>>> topicMap = new HashMap<>();
-        Map<TupleDe<String, String>, ?> rawSubsMap = (Map<TupleDe<String, String>, ?>) m.getProperty(MESSAGE_TOPICS_S);
+        Map<Boolean, TupleDe<Integer, String>> topicMap = getTopicMap(m);
 
-        if (rawSubsMap != null) {
-            for (Map.Entry<TupleDe<String, String>, ?> entry : rawSubsMap.entrySet()) {
-                if (entry.getValue() instanceof List<?>) {
-                    topicMap.put(entry.getKey(), (List<TupleDe<Integer, Integer>>) entry.getValue());
-                } else {
-                    return false;
-                }
-            }
-        }
-
-        if (topicMap.isEmpty()) {
-            System.err.println("No topics found in the message for subscription.");
+        if (topicMap == null || topicMap.isEmpty()) {
             return false;
         }
 
@@ -195,21 +158,15 @@ public class CCDTN extends ActiveRouter {
         }
 
         // Iterate through the topic map and check for matches
-        for (Map.Entry<TupleDe<String, String>, List<TupleDe<Integer, Integer>>> entry : topicMap.entrySet()) {
-            List<TupleDe<Integer, Integer>> topicMsgList = entry.getValue(); // Get the list of attributes
+        for (Map.Entry<Boolean, TupleDe<Integer, String>> entry : topicMap.entrySet()) {
+                List<Boolean> topicMsgList = new LinkedList<>();
+                topicMsgList.add(entry.getKey());
 
-            if (topicMsgList.size() != topicNode.size()) {
-                System.out.println("Mismatch in size of message topics and host interests");
-                continue; // Skip this topic and check the next one
-            }
-
-            // Check if there's any match between the message's topics and the host's interests
-            for (int i = 0; i < topicMsgList.size(); i++) {
-                TupleDe<Integer, Integer> topicMsg = topicMsgList.get(i);
-                if (topicNode.get(i) && topicMsg != null) {
-                    return true; // Found a match
+                for (Boolean top : topicMsgList) {
+                    if (topicNode.contains(top)) {
+                        return true;
+                    }
                 }
-            }
         }
 
         return false; // No match found
@@ -217,60 +174,36 @@ public class CCDTN extends ActiveRouter {
 
 
     protected List<Double> countInterestTopic(Message m, DTNHost host) {
-        boolean isSubscriber = host.isSubscriber();
-        if (m.getProperty(MESSAGE_TOPICS_S) == null) {
+        Map<Boolean, TupleDe<Integer, String>> topicMap = getTopicMap(m);
+        if (topicMap == null || topicMap.isEmpty()) {
             return null;
         }
 
-        if (isSubscriber) {
-            // Get the topics from the message
-            @SuppressWarnings("unchecked")
-            Map<Integer, TupleDe<List<Boolean>, String>> topicMap;
-            try {
-                topicMap = (Map<Integer, TupleDe<List<Boolean>, String>>) m.getProperty(MESSAGE_TOPICS_S);
-            } catch (ClassCastException e) {
-                System.out.println("Error: MESSAGE_TOPICS_S property is not of type Map<Integer, TupleDe<List<Boolean>, String>>.");
-                return null;
-            }
+        // Get the host's interests and weights
+        List<Boolean> topicNode = host.getOwnInterest();
+        List<Double> weightNode = host.getInterest();
 
-            if (topicMap == null || topicMap.isEmpty()) {
-                return null;
-            }
-
-            // Get the host's interests and weights
-            List<Boolean> topicNode = host.getOwnInterest();
-            List<Double> weightNode = host.getInterest();
-
-            if (topicNode == null || weightNode == null || topicNode.size() != weightNode.size()) {
-                return null;
-            }
-
-            // Initialize a list to store the matching weights
-            List<Double> valInterest = new ArrayList<>();
-
-            // Iterate through the topic map and check for matches
-            for (Map.Entry<Integer, TupleDe<List<Boolean>, String>> entry : topicMap.entrySet()) {
-                List<Boolean> topicMsg = entry.getValue().getFirst(); // Extract the List<Boolean> from the TupleDe
-
-                // Ensure both lists have the same size
-                if (topicMsg.size() != topicNode.size()) {
-                    System.out.println("Mismatch in size of message topics and host interests");
-                    continue; // Skip this topic and check the next one
-                }
-
-                // Check for matches and add the corresponding weights to valInterest
-                for (int i = 0; i < topicMsg.size(); i++) {
-                    if (topicMsg.get(i).equals(topicNode.get(i))) {
-                        valInterest.add(weightNode.get(i));
-                    }
-                }
-            }
-
-            return valInterest;
+        if (topicNode == null || weightNode == null || topicNode.size() != weightNode.size()) {
+            return null;
         }
 
-        return null;
+        // Initialize a list to store the matching weights
+        List<Double> valInterest = new ArrayList<>();
+
+        Iterator<Map.Entry<Boolean, TupleDe<Integer, String>>> iterator = topicMap.entrySet().iterator();
+
+        while (iterator.hasNext()) {
+            Map.Entry<Boolean, TupleDe<Integer, String>> entry = iterator.next();
+
+            // Check if the current interest exists in host's interests
+            if (topicNode.contains(entry.getKey())) {
+                valInterest.add(weightNode.get(topicNode.indexOf(entry.getKey())));
+            }
+        }
+
+        return valInterest;
     }
+
 
     @Override
     public void update() {

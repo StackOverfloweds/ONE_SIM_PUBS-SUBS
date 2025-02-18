@@ -169,22 +169,54 @@ public class PublishAndSubscriberRouting extends CCDTN {
             return false;
         }
 
-        for (DTNHost host : allHosts) {
-            String hostId = String.valueOf(host.getRouter().getHost());
+        // Ambil ID host saat ini
+        String hostId = String.valueOf(getHost().getRouter().getHost());
 
-            // Cari host yang sesuai dengan hostId
-            if (!keyEncryption.containsKey(hostId)) {
+        // Cek apakah host saat ini terdaftar dalam registeredTopics menggunakan Map.Entry
+        boolean isRegistered = false;
+
+        Map<Integer, List<TupleDe<Boolean,String>>> registered = registeredTopics;
+        if (registered == null || registered.isEmpty()) {
+            return false;
+        }
+
+        // Iterasi melalui registeredTopics untuk memeriksa pendaftaran host
+        for (Map.Entry<Integer, List<TupleDe<Boolean, String>>> entry : registered.entrySet()) {
+            List<TupleDe<Boolean, String>> valueList = entry.getValue();
+//            System.out.println("get");
+            for (TupleDe<Boolean, String> tuple : valueList) {
+                if (tuple.getSecond().equals(hostId)) {
+                    System.out.println("nice");
+                    isRegistered = true; // Host terdaftar sebagai registered
+                    break;
+                }
+            }
+            if (isRegistered) {
+                break; // Keluar dari loop jika sudah terdaftar
+            }
+        }
+
+        if (!isRegistered) {
+            return false; // Jika tidak terdaftar, hentikan proses
+        }
+
+        // Proses untuk membuat pesan baru
+        for (DTNHost host : allHosts) {
+            String getHostId = String.valueOf(host.getRouter().getHost());
+
+            // Cari host yang sesuai dengan getHostId
+            if (!keyEncryption.containsKey(getHostId)) {
                 continue;  // Lewati jika tidak cocok
             }
 
-            TupleDe<String, String> keys = keyEncryption.get(hostId);
+            TupleDe<String, String> keys = keyEncryption.get(getHostId);
 
             if (keys == null || keys.isEmpty()) {  // Pastikan list tidak kosong
                 continue;
             }
 
             // Ambil topic dan subTopic dari host yang cocok
-            if (hostId.equals(String.valueOf(getHost().getRouter().getHost()))) {
+            if (getHostId.equals(hostId)) {
                 topicVall = host.getTopicValue();
                 subTopicVall = host.getSubTopic();
             }
@@ -193,11 +225,8 @@ public class PublishAndSubscriberRouting extends CCDTN {
                 return false;
             }
 
-//            System.out.println("topicVall = " + topicVall);
-//            System.out.println("subTopicVall = " + subTopicVall);
-
             String randomMessage = EncryptionUtil.generateRandomString(20); // 20 karakter
-            System.out.println("check random msg "+randomMessage);
+            System.out.println("check random msg " + randomMessage);
 
             String keyEncrypt = keys.getSecond(); // Gunakan key dari Tuple
 
@@ -212,11 +241,12 @@ public class PublishAndSubscriberRouting extends CCDTN {
             msg.setTtl(this.msgTtl);
             msg.addProperty(MESSAGE_TOPICS_S, messageData);
             addToMessages(msg, true);
-//            System.out.println("Success to send message : " + msg.getProperty(MESSAGE_TOPICS_S));
+            System.out.println("success create msg "+msg.getProperty(MESSAGE_TOPICS_S));
             return super.createNewMessage(msg);
         }
         return false;
     }
+
 
     /**
      * metode in routing publishAndSubscriberRouting
@@ -243,9 +273,25 @@ public class PublishAndSubscriberRouting extends CCDTN {
                 break; // Pesan dihentikan oleh aplikasi
             }
         }
+        // Cek apakah host subscriber sudah terdaftar dalam subscribedTopics
+        String hostId = String.valueOf(getHost().getRouter().getHost());
+        boolean isSubscribed = false;
+
+        // Loop melalui subscribedTopics untuk mencocokkan hostId
+        for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> entry : subscribedTopics.entrySet()) {
+            TupleDe<String, List<Boolean>> key = entry.getKey();
+            if (key.getFirst().equals(hostId)) {
+                isSubscribed = true; // Host terdaftar sebagai subscriber
+                break;
+            }
+        }
+
+        if (!isSubscribed) {
+            return null; // Jika tidak terdaftar, hentikan proses
+        }
 
         Message aMessage = (outgoing == null) ? incoming : outgoing;
-        boolean isFinalRecipient = isFinalDest(aMessage, getHost());
+        boolean isFinalRecipient = isFinalDest(aMessage, getHost(),keyAuthentication);
         boolean isFirstDelivery = isFinalRecipient && !isDeliveredMessage(aMessage);
 
         if (aMessage != null && !isFinalRecipient) {
@@ -264,7 +310,7 @@ public class PublishAndSubscriberRouting extends CCDTN {
         Message msg = aMessage;
         Map<Boolean, TupleDe<Integer, String>> topicMap = getTopicMap(msg);
 
-        if (topicMap == null) {
+        if (topicMap == null || topicMap.isEmpty()) {
             return null;
         }
 
@@ -279,9 +325,9 @@ public class PublishAndSubscriberRouting extends CCDTN {
             String topicName = entry.getValue().getSecond();
 
             if (ownInterest.contains(topicBoolean)) {
-                boolean isSubscriberMatched = authenticateSubscriber(from, topicName);
+                boolean isSubscriberMatched = authenticateSubscriber(from, topicName, keyAuthentication);
                 if (isSubscriberMatched) {
-                    addToMessages(msg, true);
+                    addToMessages(msg, false);
                     System.out.println("Message added to subscriber buffer.");
                     return aMessage;
                 } else {
@@ -294,43 +340,49 @@ public class PublishAndSubscriberRouting extends CCDTN {
             }
         }
 
-        return aMessage;
+        return null;
     }
+    /**
+     * Method is called just before a transfer is finalized
+     * at {@link #update()}.
+     * Subclasses that are interested of the event may want to override this.
+     * @param con The connection whose transfer was finalized
+     */
+    @Override
+    public void transferDone(Connection con) {
+        // Retrieve the message ID and the message object from the connection
+        String msgId = con.getMessage().getId();
+        Message msg = getMessage(msgId);
 
-    private Map<Boolean, TupleDe<Integer, String>> getTopicMap(Message msg) {
-        try {
-            return (Map<Boolean, TupleDe<Integer, String>>) msg.getProperty(MESSAGE_TOPICS_S);
-        } catch (ClassCastException e) {
-            System.out.println("Error: MESSAGE_TOPICS_S property is not valid.");
-            return null;
+        if (msg == null) {
+            return;
+        }
+
+        // Check if the current host is the final recipient of the message
+        boolean isFinalRecipient = isFinalDest(msg, getHost(), keyAuthentication);
+
+        // If the host is not the final recipient, add the message to the buffer for further forwarding
+        if (!isFinalRecipient) {
+            addToMessages(msg, false);
+        }
+
+        // Check if the message has already been delivered
+        boolean isDelivered = isDeliveredMessage(msg);
+
+        // If the message has not been delivered, handle delivery confirmation
+        if (!isDelivered) {
+            handleDeliveryConfirmation(msg);
+        }
+
+        // Notify all message listeners about the transfer completion
+        for (MessageListener ml : mListeners) {
+            ml.messageTransferred(msg, con.getOtherNode(getHost()), getHost(), isDelivered);
         }
     }
 
-    private boolean authenticateSubscriber(DTNHost from, String topicName) {
-        for (Map.Entry<String, TupleDe<String, String>> entry : keyAuthentication.entrySet()) {
-            String subscriberId = entry.getKey();
-            String topicKey = entry.getValue().getFirst();
-
-            if (startTimestamps.containsKey(from) && connHistory.containsKey(from)) {
-                for (DTNHost getSub : SimScenario.getInstance().getHosts()) {
-                    String hostId = String.valueOf(getSub.getRouter().getHost());
-                    if (getSub.isSubscriber() && getHost().getRouter() instanceof PublishAndSubscriberRouting) {
-                        if (subscriberId.contains(hostId)) {
-                            String decryptedContent = DecryptUtil.decryptHMAC5(topicName, topicKey);
-                            if (decryptedContent != null) {
-                                System.out.println("Decryption Success: " + decryptedContent);
-                                return true;
-                            } else {
-                                System.out.println("Decryption Failed.");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return false;
+    private void handleDeliveryConfirmation(Message msg) {
+        msg.updateProperty(MESSAGE_TOPICS_S, getTopicMap(msg));
     }
-
 
 
     /**
