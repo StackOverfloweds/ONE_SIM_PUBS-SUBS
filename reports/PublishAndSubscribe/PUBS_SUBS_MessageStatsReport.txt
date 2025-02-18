@@ -1,10 +1,10 @@
 Message stats for scenario PUBS_SUBS
-sim_time: 13519.6000
-created: 0
-started: 0
-relayed: 0
-aborted: 0
-dropped: 0
+sim_time: 86400.0000
+created: 428
+started: 46743
+relayed: 43226
+aborted: 5088
+dropped: 1690
 removed: 0
 delivered: 0
 delivery_prob: 0.0000
@@ -14,7 +14,7 @@ latency_avg: NaN
 latency_med: NaN
 hopcount_avg: NaN
 hopcount_med: 0
-buffertime_avg: NaN
-buffertime_med: NaN
+buffertime_avg: 3631.6414
+buffertime_med: 1972.1000
 rtt_avg: NaN
 rtt_med: NaN

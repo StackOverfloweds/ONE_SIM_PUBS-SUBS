@@ -1,0 +1,6 @@
+Publish/Subscribe Report
+========================
+
+Total Messages Published: 428
+Total Messages Delivered: 0
+
