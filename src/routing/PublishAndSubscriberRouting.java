@@ -23,7 +23,7 @@ public class PublishAndSubscriberRouting extends CCDTN {
     public static Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics; // key for the topic and id of subscriber, value is for list of numeric atribute
     public static Map<Integer, List<TupleDe<Boolean, String>>> registeredTopics;
     public static Map<String, TupleDe<String, String>> keyEncryption;
-    public static Map<String, TupleDe<String, String>> keyAuthentication;
+    public static Map<String, List<TupleDe<String, String>>> keyAuthentication;
     public static int lcnum;
 
     private boolean topicVall;
@@ -90,9 +90,9 @@ public class PublishAndSubscriberRouting extends CCDTN {
         }
 
         // Ensure deep copy of keyAuthentication from brokerHandler if needed
-        Map<String, TupleDe<String, String>> tempKeyAuth = brokerHandler.getKeyAuthentication();
+        Map<String, List<TupleDe<String, String>>> tempKeyAuth = brokerHandler.getKeyAuthentication();
         if (tempKeyAuth != null) {
-            for (Map.Entry<String, TupleDe<String, String>> entry : tempKeyAuth.entrySet()) { // Deep copy the list
+            for (Map.Entry<String, List<TupleDe<String, String>>> entry : tempKeyAuth.entrySet()) { // Deep copy the list
                 keyAuthentication.put(entry.getKey(), entry.getValue());
             }
         }
@@ -143,7 +143,7 @@ public class PublishAndSubscriberRouting extends CCDTN {
         } else {
             keyAuthentication = new HashMap<>();
             // Deep copy of keyAuthentication
-            for (Map.Entry<String, TupleDe<String, String>> entry : r.keyAuthentication.entrySet()) {
+            for (Map.Entry<String, List<TupleDe<String, String>>> entry : r.keyAuthentication.entrySet()) {
                 keyAuthentication.put(entry.getKey(), entry.getValue());
             }
         }
@@ -230,10 +230,12 @@ public class PublishAndSubscriberRouting extends CCDTN {
                 return false;
             }
 
-            String randomMessage = EncryptionUtil.generateRandomString(20); // 20 karakter
+//            String randomMessage = EncryptionUtil.generateRandomString(20); // 20 karakter
+            String randomMessage = "abcdefghijABCDEFGHIJ"; // 20 karakter
             String keyEncrypt = keys.getSecond(); // Gunakan key dari Tuple
+            String getBinaryPath = keys.getFirst();
 
-            String hashedMessage = EncryptionUtil.encrypt(randomMessage, keyEncrypt);
+            String hashedMessage = EncryptionUtil.encryptMessage(randomMessage, keyEncrypt);
 
             Map<Boolean, TupleDe<Integer, String>> messageData = new HashMap<>();
             TupleDe<Integer, String> value = new TupleDe<>(subTopicVall, hashedMessage);
