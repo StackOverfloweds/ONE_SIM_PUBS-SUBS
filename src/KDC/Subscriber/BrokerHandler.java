@@ -16,7 +16,7 @@ import java.util.HashMap;
 public class BrokerHandler {
     private Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics = PublishAndSubscriberRouting.subscribedTopics;
     private Map<String, TupleDe<String, String>> keyEncryption = PublishAndSubscriberRouting.keyEncryption;
-    private Map<String, TupleDe<String, String>> keyAuthentication = PublishAndSubscriberRouting.keyAuthentication;
+    private Map<String, List<TupleDe<String, String>>> keyAuthentication = PublishAndSubscriberRouting.keyAuthentication;
     private int lcnum = PublishAndSubscriberRouting.lcnum;
 
     public KDCRegistrationProcessor processor = new KDCRegistrationProcessor();
@@ -57,7 +57,8 @@ public class BrokerHandler {
         if (subscriptions == null || subscriptions.isEmpty()) {
             return;
         }
-        Map<Integer, List<TupleDe<Boolean, String>>> topics = processor.getRegisteredTopics(); // Integer = sub-topik
+
+        Map<Integer, List<TupleDe<Boolean, String>>> topics = processor.getRegisteredTopics();
         if (topics == null || topics.isEmpty()) {
             return;
         }
@@ -67,6 +68,15 @@ public class BrokerHandler {
         for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> entry : subscriptions.entrySet()) {
             TupleDe<String, List<Boolean>> subscriberInfo = entry.getKey();
             List<TupleDe<Integer, Integer>> topicAttributes = entry.getValue();
+
+            // ✅ **Cek jika subscriber sudah terdaftar dengan topik yang sama**
+            if (subscribedTopics.containsKey(subscriberInfo)) {
+                List<TupleDe<Integer, Integer>> existingAttributes = subscribedTopics.get(subscriberInfo);
+                if (existingAttributes.containsAll(topicAttributes)) {
+//                    System.out.println("❌ Subscriber " + subscriberInfo.getFirst() + " sudah terdaftar dengan topik yang sama. Subscription ditolak.");
+                    continue; // **Jangan tambahkan duplikasi**
+                }
+            }
 
             boolean topicMatches = false;
             List<TupleDe<TupleDe<Boolean, Integer>, String>> matchedTopics = new ArrayList<>();
@@ -88,7 +98,7 @@ public class BrokerHandler {
 
                         if (subTopicPublisher >= minValue && subTopicPublisher <= maxValue && subscriberInfo.getSecond().contains(topicBoolean)) {
                             topicMatches = true;
-                            matchedTopics.add(new TupleDe<>(new TupleDe<>(topicBoolean, subTopicPublisher), idPubs)); // Struktur baru
+                            matchedTopics.add(new TupleDe<>(new TupleDe<>(topicBoolean, subTopicPublisher), idPubs));
                             break;
                         }
                     }
@@ -109,22 +119,19 @@ public class BrokerHandler {
                 }
             }
 
-            // Simpan subscriber dan topik yang cocok ke dalam Map
             if (!matchedTopics.isEmpty()) {
                 subscriberTopicMap.put(subscriberInfo, matchedTopics);
             }
 
-            // Jika sukses subscribe, buat NAKT
+            // ✅ **Jika sukses subscribe, buat NAKT**
             NAKTBuilder nakt = new NAKTBuilder(lcnum);
             if (nakt.buildNAKT(subscriberTopicMap, existingAttributes)) {
                 Map<String, TupleDe<String, String>> publisherKeys = nakt.getKeysForPublisher();
-                Map<String, TupleDe<String, String>> subscriberKeys = nakt.getKeysForSubscriber();
+                Map<String, List<TupleDe<String, String>>> subscriberKeys = nakt.getKeysForSubscriber();
 
-                // Pastikan tidak null & tidak kosong sebelum diproses
                 if (publisherKeys != null && !publisherKeys.isEmpty()) {
                     for (Map.Entry<String, TupleDe<String, String>> entryKey : publisherKeys.entrySet()) {
-                        if (entryKey.getValue() != null && !entry.getValue().isEmpty()) {
-                            // Pastikan key sudah ada, jika belum buat list baru
+                        if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
                             if (!keyEncryption.containsKey(entryKey.getKey())) {
                                 keyEncryption.put(entryKey.getKey(), entryKey.getValue());
                             }
@@ -133,18 +140,18 @@ public class BrokerHandler {
                 }
 
                 if (subscriberKeys != null && !subscriberKeys.isEmpty()) {
-                    for (Map.Entry<String, TupleDe<String, String>> entryKey : subscriberKeys.entrySet()) {
-                        if (entryKey.getValue() != null && !entry.getValue().isEmpty()) {
+                    for (Map.Entry<String, List<TupleDe<String, String>>> entryKey : subscriberKeys.entrySet()) {
+                        if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
                             if (!keyAuthentication.containsKey(entryKey.getKey())) {
                                 keyAuthentication.put(entryKey.getKey(), entryKey.getValue());
                             }
-
                         }
                     }
                 }
             }
         }
     }
+
 
     public Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> getSubscribedTopics() {
         // Implementation to retrieve the registered topics
@@ -155,7 +162,7 @@ public class BrokerHandler {
         return keyEncryption;
     }
 
-    public Map<String, TupleDe<String, String>> getKeyAuthentication() {
+    public Map<String, List<TupleDe<String, String>>> getKeyAuthentication() {
         return keyAuthentication;
     }
 

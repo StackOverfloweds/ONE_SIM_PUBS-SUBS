@@ -70,7 +70,6 @@ public class SprayAndWaitRouter extends ActiveRouter {
 			/* in standard S'n'W the receiving node gets only single copy */
 			nrofCopies = 1;
 		}
-		
 		msg.updateProperty(MSG_COUNT_PROPERTY, nrofCopies);
 		return msg;
 	}

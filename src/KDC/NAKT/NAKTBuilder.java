@@ -8,7 +8,7 @@ public class NAKTBuilder {
     private final int lcnum;
     private final KeyManager keyManager;
     private final Map<String, TupleDe<String, String>> encryptedKeyMap;
-    private final Map<String, TupleDe<String, String>> subscriberKeyMap;
+    private final Map<String, List<TupleDe<String, String>>> subscriberKeyMap;
 
     public NAKTBuilder(int lcnum) {
         this.lcnum = lcnum;
@@ -26,7 +26,7 @@ public class NAKTBuilder {
         for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, String>>> entry : subscriberTopicMap.entrySet()) {
             TupleDe<String, List<Boolean>> subscriberInfo = entry.getKey();
             List<TupleDe<TupleDe<Boolean, Integer>, String>> publisherInfo = entry.getValue();
-//            System.out.println("subscriberInfo: " + subscriberInfo);
+
             if (publisherInfo == null || publisherInfo.isEmpty()) continue;
 
             TupleDe<TupleDe<Boolean, Integer>, String> firstEntry = publisherInfo.get(0);
@@ -34,7 +34,7 @@ public class NAKTBuilder {
             int num = innerTuple.getSecond();
             String publisherID = firstEntry.getSecond();
 
-            // Check if the publisher key already exists
+            // 🔹 **Generate Publisher Key**
             if (!encryptedKeyMap.containsKey(publisherID)) {
                 String rootKey = keyManager.generateRootKey(num);
                 List<TupleDe<String, String>> keyList = new ArrayList<>();
@@ -51,40 +51,72 @@ public class NAKTBuilder {
                 }
             }
 
-            // Process subscriber key
+            // 🔹 **Generate Subscriber Key**
             if (!subscriberKeyMap.containsKey(subscriberInfo.getFirst())) {
-                TupleDe<String, String> deepestKey = null;
+                List<TupleDe<String, String>> derivedKeys = new ArrayList<>();
+                String closestBinaryPath = null;
                 int maxDepth = -1;
+
+                // **Hitung key tree sekali saja untuk semua range**
+                List<TupleDe<String, String>> keyList = new ArrayList<>();
+                String rootKey = keyManager.generateRootKey(num);
+                encryptTreeNodes(0, getNearestPowerOfTwo(num) - 1, rootKey, "", 1, keyList);
+
                 for (TupleDe<Integer, Integer> range : existingAttributes) {
                     int minValue = range.getFirst();
                     int maxValue = range.getSecond();
-                    List<TupleDe<String, String>> keyList = new ArrayList<>();
-                    encryptTreeNodes(0, getNearestPowerOfTwo(maxValue) - 1, keyManager.generateRootKey(num), "", 1, keyList);
 
+                    // **Cari key dengan binary path yang paling mendekati dari bawah**
                     for (int i = minValue; i <= maxValue; i++) {
                         String binaryPathSubs = Integer.toBinaryString(i);
+
                         for (TupleDe<String, String> keyTuple : keyList) {
-                            if (keyTuple.getFirst().equals(binaryPathSubs)) {
-                                int currentDepth = binaryPathSubs.length();
+                            String currentBinaryPath = keyTuple.getFirst(); // 🔹 Binary Path
+                            String currentKey = keyTuple.getSecond(); // 🔹 Key-nya
+//                            System.out.println("get binary path: " + currentBinaryPath);
+                            // **Pastikan binary path tidak selalu "1111"**
+                            if (binaryPathSubs.startsWith(currentBinaryPath)) {
+                                int currentDepth = currentBinaryPath.length();
+
+                                // **Jika menemukan kedalaman lebih dalam, reset key yang lebih dangkal**
                                 if (currentDepth > maxDepth) {
                                     maxDepth = currentDepth;
-                                    deepestKey = keyTuple;
+                                    derivedKeys.clear();
+                                    closestBinaryPath = currentBinaryPath;
+                                }
+
+                                // **Tambahkan key jika kedalaman cocok & belum ada dalam daftar**
+                                boolean keyExists = derivedKeys.stream()
+                                        .anyMatch(tuple -> tuple.getFirst().equals(currentBinaryPath) &&
+                                                tuple.getSecond().equals(currentKey));
+
+                                if (currentDepth == maxDepth && !keyExists) {
+                                    derivedKeys.add(new TupleDe<>(currentBinaryPath, currentKey));
                                 }
                             }
                         }
+
                     }
                 }
-                if (deepestKey != null) {
-                    subscriberKeyMap.put(subscriberInfo.getFirst(), deepestKey);
+
+                // 🔹 **Ambil semua turunan dari key yang ditemukan**
+                if (closestBinaryPath != null) {
+                    for (TupleDe<String, String> keyTuple : keyList) {
+                        if (keyTuple.getFirst().startsWith(closestBinaryPath) && !derivedKeys.contains(keyTuple)) {
+                            derivedKeys.add(keyTuple);
+                        }
+                    }
+                }
+
+                if (!derivedKeys.isEmpty()) {
+                    subscriberKeyMap.put(subscriberInfo.getFirst(), derivedKeys);
                 }
             }
         }
         return true;
     }
 
-    /**
-     * Recursive method to build the NAKT tree and store keys
-     */
+
     private void encryptTreeNodes(int min, int max, String parentKey, String binaryPath, int depth, List<TupleDe<String, String>> keyList) {
         if (depth > lcnum || min >= max) return;
 
@@ -95,28 +127,29 @@ public class NAKTBuilder {
         String leftKey = keyManager.generateChildKey(parentKey, leftPath);
         String rightKey = keyManager.generateChildKey(parentKey, rightPath);
 
-        keyList.add(new TupleDe<>(leftPath, leftKey));
-        keyList.add(new TupleDe<>(rightPath, rightKey));
+        // 🔹 **Pastikan hanya path yang sesuai dengan publisher/subscriber yang diambil**
+        if (leftPath.length() == lcnum) keyList.add(new TupleDe<>(leftPath, leftKey));
+        if (rightPath.length() == lcnum) keyList.add(new TupleDe<>(rightPath, rightKey));
 
+        // 🔹 **Logging Debugging**
 //        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
 //        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
 //        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);
 
+        // 🔹 **Rekursif untuk menelusuri semua kemungkinan path**
         encryptTreeNodes(min, mid, leftKey, leftPath, depth + 1, keyList);
         encryptTreeNodes(mid + 1, max, rightKey, rightPath, depth + 1, keyList);
     }
 
-    /**
-     * Retrieves the Map of keys for a publisher
-     */
+
+
+
+
     public Map<String, TupleDe<String, String>> getKeysForPublisher() {
         return this.encryptedKeyMap;
     }
 
-    /**
-     * Retrieves the Map of keys for a subscriber based on its ID.
-     */
-    public Map<String, TupleDe<String, String>> getKeysForSubscriber() {
+    public Map<String, List<TupleDe<String, String>>> getKeysForSubscriber() {
         return this.subscriberKeyMap;
     }
 
