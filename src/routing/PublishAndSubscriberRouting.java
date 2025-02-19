@@ -23,11 +23,17 @@ public class PublishAndSubscriberRouting extends CCDTN {
     public static Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics; // key for the topic and id of subscriber, value is for list of numeric atribute
     public static Map<Integer, List<TupleDe<Boolean, String>>> registeredTopics;
     public static Map<String, TupleDe<String, String>> keyEncryption;
-    public static Map<String, TupleDe<String, String>> keyAuthentication;
+    public static Map<String, List<TupleDe<String, String>>> keyAuthentication;
     public static int lcnum;
 
     private boolean topicVall;
     private int subTopicVall;
+
+    // for report
+    private int msgReceived = 0;
+    private int msgTransferred = 0;
+    private int dataReceived = 0;
+    private int dataTransferred = 0;
 
     public KDCRegistrationProcessor processor = new KDCRegistrationProcessor();
     public BrokerHandler brokerHandler = new BrokerHandler();
@@ -84,9 +90,9 @@ public class PublishAndSubscriberRouting extends CCDTN {
         }
 
         // Ensure deep copy of keyAuthentication from brokerHandler if needed
-        Map<String, TupleDe<String, String>> tempKeyAuth = brokerHandler.getKeyAuthentication();
+        Map<String, List<TupleDe<String, String>>> tempKeyAuth = brokerHandler.getKeyAuthentication();
         if (tempKeyAuth != null) {
-            for (Map.Entry<String, TupleDe<String, String>> entry : tempKeyAuth.entrySet()) { // Deep copy the list
+            for (Map.Entry<String, List<TupleDe<String, String>>> entry : tempKeyAuth.entrySet()) { // Deep copy the list
                 keyAuthentication.put(entry.getKey(), entry.getValue());
             }
         }
@@ -137,7 +143,7 @@ public class PublishAndSubscriberRouting extends CCDTN {
         } else {
             keyAuthentication = new HashMap<>();
             // Deep copy of keyAuthentication
-            for (Map.Entry<String, TupleDe<String, String>> entry : r.keyAuthentication.entrySet()) {
+            for (Map.Entry<String, List<TupleDe<String, String>>> entry : r.keyAuthentication.entrySet()) {
                 keyAuthentication.put(entry.getKey(), entry.getValue());
             }
         }
@@ -175,7 +181,7 @@ public class PublishAndSubscriberRouting extends CCDTN {
         // Cek apakah host saat ini terdaftar dalam registeredTopics menggunakan Map.Entry
         boolean isRegistered = false;
 
-        Map<Integer, List<TupleDe<Boolean,String>>> registered = registeredTopics;
+        Map<Integer, List<TupleDe<Boolean, String>>> registered = registeredTopics;
         if (registered == null || registered.isEmpty()) {
             return false;
         }
@@ -186,7 +192,6 @@ public class PublishAndSubscriberRouting extends CCDTN {
 //            System.out.println("get");
             for (TupleDe<Boolean, String> tuple : valueList) {
                 if (tuple.getSecond().equals(hostId)) {
-                    System.out.println("nice");
                     isRegistered = true; // Host terdaftar sebagai registered
                     break;
                 }
@@ -225,23 +230,25 @@ public class PublishAndSubscriberRouting extends CCDTN {
                 return false;
             }
 
-            String randomMessage = EncryptionUtil.generateRandomString(20); // 20 karakter
-            System.out.println("check random msg " + randomMessage);
-
+//            String randomMessage = EncryptionUtil.generateRandomString(20); // 20 karakter
+            String randomMessage = "abcdefghijABCDEFGHIJ"; // 20 karakter
             String keyEncrypt = keys.getSecond(); // Gunakan key dari Tuple
+            String getBinaryPath = keys.getFirst();
 
-            String hashedMessage = EncryptionUtil.hashWithHmacSHA256(randomMessage, keyEncrypt);
+            String hashedMessage = EncryptionUtil.encryptMessage(randomMessage, keyEncrypt);
 
             Map<Boolean, TupleDe<Integer, String>> messageData = new HashMap<>();
             TupleDe<Integer, String> value = new TupleDe<>(subTopicVall, hashedMessage);
             messageData.put(topicVall, value);
-
+            System.out.println("get msg before encrytion: " + randomMessage);
+            System.out.println("get key encryption: " + keyEncrypt);
+            System.out.println("get msg after encrytion: " + hashedMessage);
             // **5. Tambahkan ke properti message**
             makeRoomForMessage(msg.getSize());
             msg.setTtl(this.msgTtl);
             msg.addProperty(MESSAGE_TOPICS_S, messageData);
             addToMessages(msg, true);
-            System.out.println("success create msg "+msg.getProperty(MESSAGE_TOPICS_S));
+            System.out.println("success create msg with encrypt" + msg.getProperty(MESSAGE_TOPICS_S));
             return super.createNewMessage(msg);
         }
         return false;
@@ -266,11 +273,13 @@ public class PublishAndSubscriberRouting extends CCDTN {
             return null;
         }
 
+        incoming.setReceiveTime(SimClock.getTime());
+
         Message outgoing = incoming;
         for (Application app : getApplications(incoming.getAppID())) {
             outgoing = app.handle(outgoing, getHost());
             if (outgoing == null) {
-                break; // Pesan dihentikan oleh aplikasi
+                break;
             }
         }
         // Cek apakah host subscriber sudah terdaftar dalam subscribedTopics
@@ -291,13 +300,14 @@ public class PublishAndSubscriberRouting extends CCDTN {
         }
 
         Message aMessage = (outgoing == null) ? incoming : outgoing;
-        boolean isFinalRecipient = isFinalDest(aMessage, getHost(),keyAuthentication);
-        boolean isFirstDelivery = isFinalRecipient && !isDeliveredMessage(aMessage);
+        boolean isFinalRecipient = isFinalDest(aMessage, getHost(), keyAuthentication);
+        boolean isFirstDelivery = isFinalRecipient &&
+                !isDeliveredMessage(aMessage);
 
-        if (aMessage != null && !isFinalRecipient) {
+
+        if (outgoing != null && !isFinalRecipient) {
             addToMessages(aMessage, false);
         }
-
         if (isFirstDelivery) {
             this.deliveredMessages.put(id, aMessage);
         }
@@ -306,84 +316,22 @@ public class PublishAndSubscriberRouting extends CCDTN {
             ml.messageTransferred(aMessage, from, getHost(), isFirstDelivery);
         }
 
-        // Mengecek Topic dan Key Authentication
-        Message msg = aMessage;
-        Map<Boolean, TupleDe<Integer, String>> topicMap = getTopicMap(msg);
+        this.msgReceived++;
+        this.dataReceived += aMessage.getSize();
 
-        if (topicMap == null || topicMap.isEmpty()) {
-            return null;
-        }
-
-        List<Boolean> ownInterest = getHost().getOwnInterest();
-        if (ownInterest == null || ownInterest.isEmpty()) {
-            return null;
-        }
-
-        // Loop melalui topicMap dan bandingkan hanya boolean
-        for (Map.Entry<Boolean, TupleDe<Integer, String>> entry : topicMap.entrySet()) {
-            Boolean topicBoolean = entry.getKey();
-            String topicName = entry.getValue().getSecond();
-
-            if (ownInterest.contains(topicBoolean)) {
-                boolean isSubscriberMatched = authenticateSubscriber(from, topicName, keyAuthentication);
-                if (isSubscriberMatched) {
-                    addToMessages(msg, false);
-                    System.out.println("Message added to subscriber buffer.");
-                    return aMessage;
-                } else {
-                    System.out.println("No matching subscriber found for decryption.");
-                    return null;
-                }
-            } else {
-                System.out.println("No matching interest found for topic: " + topicName);
-                return null;
-            }
-        }
-
-        return null;
+        return aMessage;
     }
-    /**
-     * Method is called just before a transfer is finalized
-     * at {@link #update()}.
-     * Subclasses that are interested of the event may want to override this.
-     * @param con The connection whose transfer was finalized
-     */
-    @Override
-    public void transferDone(Connection con) {
-        // Retrieve the message ID and the message object from the connection
-        String msgId = con.getMessage().getId();
-        Message msg = getMessage(msgId);
 
-        if (msg == null) {
+    @Override
+    protected void transferDone(Connection con) {
+        if (con == null || con.getMessage() == null) {
             return;
         }
 
-        // Check if the current host is the final recipient of the message
-        boolean isFinalRecipient = isFinalDest(msg, getHost(), keyAuthentication);
+        this.msgTransferred++;
+        this.dataTransferred += con.getMessage().getSize();
 
-        // If the host is not the final recipient, add the message to the buffer for further forwarding
-        if (!isFinalRecipient) {
-            addToMessages(msg, false);
-        }
-
-        // Check if the message has already been delivered
-        boolean isDelivered = isDeliveredMessage(msg);
-
-        // If the message has not been delivered, handle delivery confirmation
-        if (!isDelivered) {
-            handleDeliveryConfirmation(msg);
-        }
-
-        // Notify all message listeners about the transfer completion
-        for (MessageListener ml : mListeners) {
-            ml.messageTransferred(msg, con.getOtherNode(getHost()), getHost(), isDelivered);
-        }
     }
-
-    private void handleDeliveryConfirmation(Message msg) {
-        msg.updateProperty(MESSAGE_TOPICS_S, getTopicMap(msg));
-    }
-
 
     /**
      * Comparator untuk sorting message berdasarkan
@@ -431,6 +379,7 @@ public class PublishAndSubscriberRouting extends CCDTN {
 
     private Tuple<Message, Connection> tryOtherMessages() {
         List<Tuple<Message, Connection>> messages = new ArrayList<>();
+        List<Tuple<Message, Connection>> tempMessages = new ArrayList<>();
 
         // Get all connections
         Collection<Connection> connections = getConnections();
@@ -468,22 +417,43 @@ public class PublishAndSubscriberRouting extends CCDTN {
                         continue;
                     }
                     if (isSameInterest(msg, other)) {
-                        messages.add(new Tuple<>(msg, con));
+                        tempMessages.add(new Tuple<>(msg, con));
                     }
                 }
             }
         }
+
+
+        // Sort messages based on interest similarity
+        Collections.sort(tempMessages, new InterestSimilarityComparator());
+
+        messages.addAll(tempMessages);
+        tempMessages.clear();
+
 
         // If no messages are found, return null
         if (messages.isEmpty()) {
             return null;
         }
 
-        // Sort messages based on interest similarity
-        Collections.sort(messages, new InterestSimilarityComparator());
-
         // Try to transfer the messages
         return tryMessagesForConnected(messages);
+    }
+
+    public int getTotalDataRcv() {
+        return this.dataReceived;
+    }
+
+    public int getTotalDataTrf() {
+        return this.dataTransferred;
+    }
+
+    public int getMsgReceived() {
+        return this.msgReceived;
+    }
+
+    public int getMsgTransferred() {
+        return this.msgTransferred;
     }
 
     // Method to replicate the router
@@ -491,4 +461,6 @@ public class PublishAndSubscriberRouting extends CCDTN {
     public MessageRouter replicate() {
         return new PublishAndSubscriberRouting(this);
     }
+
+
 }

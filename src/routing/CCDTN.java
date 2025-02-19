@@ -66,20 +66,26 @@ public class CCDTN extends ActiveRouter {
     }
 
 
-    protected boolean isFinalDest(Message m, DTNHost host,  Map<String, TupleDe<String, String>> keyAuth) {
+    protected boolean isFinalDest(Message m, DTNHost host,  Map<String, List<TupleDe<String, String>>> keyAuth) {
         // Cek apakah host sudah subscribe ke final destination
         Map<Boolean, TupleDe<Integer, String>> finalDestMap = getTopicMap(m);
+
 
         if (finalDestMap == null || finalDestMap.isEmpty()) {
             return false;
         }
 
+
         List<Boolean> hostTopicNode = host.getOwnInterest();
         List<Double> hostWeightNode = host.getInterest();
 
-        if (hostTopicNode == null || hostWeightNode == null || hostTopicNode.size() != hostWeightNode.size()) {
+        if (hostTopicNode == null) hostTopicNode = new ArrayList<>();
+        if (hostWeightNode == null) hostWeightNode = new ArrayList<>();
+
+        if (hostTopicNode.isEmpty() || hostWeightNode.isEmpty()) {
             return false;
         }
+
 
         for (Map.Entry<Boolean, TupleDe<Integer, String>> entry : finalDestMap.entrySet()) {
             List<Boolean> topicMsg = new LinkedList<>();
@@ -87,13 +93,19 @@ public class CCDTN extends ActiveRouter {
             TupleDe<Integer, String> topic = entry.getValue();
             String getMsg = topic.getSecond();
 
+
             for (Boolean top : topicMsg) {
+                if (top == null) {
+                    return false;
+                }
                 // Cek apakah topik ini ada di hostTopicNode
                 if (hostTopicNode.contains(top)) {
                     double weight = hostWeightNode.get(hostTopicNode.indexOf(entry.getKey()));
                     if (weight > 0) { // Jika host sudah memiliki weight > 0 untuk topik ini
                         boolean isSubscriberMatched = authenticateSubscriber(host, getMsg, keyAuth);
-                        if (isSubscriberMatched) return true;
+                        if (isSubscriberMatched) {
+                            return true;
+                        }
                         else {
                             return false;
                         }
@@ -106,30 +118,34 @@ public class CCDTN extends ActiveRouter {
         return false;
     }
 
-    protected boolean authenticateSubscriber(DTNHost from, String topicName, Map<String, TupleDe<String, String>> keyAuth) {
-        for (Map.Entry<String, TupleDe<String, String>> entry : keyAuth.entrySet()) {
+    protected boolean authenticateSubscriber(DTNHost from, String topicName, Map<String, List<TupleDe<String, String>>> keyAuth) {
+        for (Map.Entry<String, List<TupleDe<String, String>>> entry : keyAuth.entrySet()) {
             String subscriberId = entry.getKey();
-            String topicKey = entry.getValue().getFirst();
+            List<TupleDe<String, String>> keyList = entry.getValue();
 
-            if (startTimestamps.containsKey(from) && connHistory.containsKey(from)) {
-                for (DTNHost getSub : SimScenario.getInstance().getHosts()) {
-                    String hostId = String.valueOf(getSub.getRouter().getHost());
-                    if (getSub.isSubscriber() && getHost().getRouter() instanceof PublishAndSubscriberRouting) {
-                        if (subscriberId.contains(hostId)) {
-                            String decryptedContent = DecryptUtil.decryptHMAC5(topicName, topicKey);
-                            if (decryptedContent != null) {
-                                System.out.println("Decryption Success: " + decryptedContent);
-                                return true;
-                            } else {
-                                System.out.println("Decryption Failed.");
-                            }
-                        }
+            if (keyList == null || keyList.isEmpty()) {
+                continue;
+            }
+
+            for (DTNHost getSub : SimScenario.getInstance().getHosts()) {
+                String hostId = String.valueOf(getSub.getRouter().getHost());
+
+                if (getSub.isSubscriber() && getHost().getRouter() instanceof CCDTN && subscriberId.contains(hostId)) {
+                    String decryptedContent = DecryptUtil.decryptMessage(topicName, keyList);
+
+                    if (decryptedContent != null) {
+                        System.out.println("✅ Final Decryption Success: " + decryptedContent);
+                        return true;
                     }
                 }
             }
         }
+
         return false;
     }
+
+
+
 
 
 
