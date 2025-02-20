@@ -4,18 +4,18 @@ Simulation Time: 86400.0000
 =====================================================
 
 === Basic Message Statistics ===
-Messages Created: 408
-Messages Started: 48444
-Messages Relayed: 2501
-Messages Aborted: 5194
-Messages Dropped: 1972
+Messages Created: 382
+Messages Started: 49593
+Messages Relayed: 2390
+Messages Aborted: 5413
+Messages Dropped: 2166
 Messages Removed: 0
-Messages Delivered: 612
+Messages Delivered: 314
 
 === Delivery Metrics ===
-Delivery Probability: 1.5000
+Delivery Probability: 0.8220
 Response Success Probability: 0.0000
-Overhead Ratio: 3.0866
+Overhead Ratio: 6.6115
 =====================================================
 End of Report
 =====================================================

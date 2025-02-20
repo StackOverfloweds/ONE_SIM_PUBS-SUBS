@@ -4,7 +4,6 @@ import KDC.NAKT.NAKTBuilder;
 import KDC.Publisher.KDCRegistrationProcessor;
 import core.DTNHost;
 import core.SimScenario;
-import routing.CCDTN;
 import routing.PublishAndSubscriberRouting;
 import routing.util.TupleDe;
 
@@ -21,7 +20,14 @@ public class BrokerHandler {
 
     public KDCRegistrationProcessor processor = new KDCRegistrationProcessor();
 
-
+    /**
+     * Sends a subscription request to a broker.
+     * This method validates the broker and the subscription request before processing.
+     *
+     * @param subscriptions The subscription details of the subscriber.
+     * @param broker The broker responsible for managing subscriptions.
+     * @return True if the subscription was successfully processed, otherwise false.
+     */
     public boolean sendSubscriptionToBroker(Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscriptions, DTNHost broker) {
         if (broker == null || subscriptions == null || subscriptions.isEmpty()) return false;
         if (!broker.isBroker()) {
@@ -31,6 +37,14 @@ public class BrokerHandler {
         return forwardToKDC(subscriptions, broker);
     }
 
+    /**
+     * Forwards the subscription details to the KDC for processing.
+     * It identifies the KDC and updates the subscription data accordingly.
+     *
+     * @param data The subscription data to be forwarded.
+     * @param broker The broker forwarding the request.
+     * @return True if successfully forwarded, otherwise false.
+     */
     private boolean forwardToKDC(Map<?, ?> data, DTNHost broker) {
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
         if (allHosts == null || allHosts.isEmpty()) return false;
@@ -53,6 +67,12 @@ public class BrokerHandler {
         return false;
     }
 
+    /**
+     * Adds new subscriptions to the subscribed topics.
+     * This method ensures that duplicate subscriptions are not added and updates the encryption keys accordingly.
+     *
+     * @param subscriptions The subscription data to be added.
+     */
     public void addSubscriptions(Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscriptions) {
         if (subscriptions == null || subscriptions.isEmpty()) {
             return;
@@ -69,12 +89,11 @@ public class BrokerHandler {
             TupleDe<String, List<Boolean>> subscriberInfo = entry.getKey();
             List<TupleDe<Integer, Integer>> topicAttributes = entry.getValue();
 
-            // ✅ **Cek jika subscriber sudah terdaftar dengan topik yang sama**
+            // ✅ **Check if the subscriber is already registered with the same topic**
             if (subscribedTopics.containsKey(subscriberInfo)) {
                 List<TupleDe<Integer, Integer>> existingAttributes = subscribedTopics.get(subscriberInfo);
                 if (existingAttributes.containsAll(topicAttributes)) {
-//                    System.out.println("❌ Subscriber " + subscriberInfo.getFirst() + " sudah terdaftar dengan topik yang sama. Subscription ditolak.");
-                    continue; // **Jangan tambahkan duplikasi**
+                    continue; // **Avoid duplicate subscriptions**
                 }
             }
 
@@ -123,7 +142,7 @@ public class BrokerHandler {
                 subscriberTopicMap.put(subscriberInfo, matchedTopics);
             }
 
-            // ✅ **Jika sukses subscribe, buat NAKT**
+            // ✅ **If the subscription is successful, generate NAKT**
             NAKTBuilder nakt = new NAKTBuilder(lcnum);
             if (nakt.buildNAKT(subscriberTopicMap, existingAttributes)) {
                 Map<String, TupleDe<String, String>> publisherKeys = nakt.getKeysForPublisher();
@@ -152,19 +171,30 @@ public class BrokerHandler {
         }
     }
 
-
+    /**
+     * Retrieves the map of subscribed topics.
+     *
+     * @return A map containing subscribed topics and their attributes.
+     */
     public Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> getSubscribedTopics() {
-        // Implementation to retrieve the registered topics
         return subscribedTopics;
     }
 
-    public Map<String, TupleDe<String, String>> getKeyEncryption () {
+    /**
+     * Retrieves the encryption keys for publishers.
+     *
+     * @return A map containing publisher encryption keys.
+     */
+    public Map<String, TupleDe<String, String>> getKeyEncryption() {
         return keyEncryption;
     }
 
+    /**
+     * Retrieves the authentication keys for subscribers.
+     *
+     * @return A map containing subscriber authentication keys.
+     */
     public Map<String, List<TupleDe<String, String>>> getKeyAuthentication() {
         return keyAuthentication;
     }
-
-
 }
