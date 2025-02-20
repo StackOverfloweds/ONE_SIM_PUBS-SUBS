@@ -12,10 +12,13 @@ public class DecryptUtil {
     private static final int IV_SIZE = 12;
     private static final int TAG_LENGTH = 128;
 
-    public static String decryptMessage(String encryptedMessage, List<TupleDe<String, String>> keyList) {
+    public static TupleDe<String, String> decryptMessage(String encryptedMessage, List<TupleDe<String, String>> keyList) {
+        TupleDe<String, String> lastAttempt = null;
+
         for (TupleDe<String, String> keyTuple : keyList) {
-            String binaryPath = keyTuple.getFirst(); // 🔹 Binary Path dari key turunan
-            String keyBase64 = keyTuple.getSecond(); // 🔹 Key yang digunakan untuk dekripsi
+            String binaryPath = keyTuple.getFirst();
+            String keyBase64 = keyTuple.getSecond();
+            String decryptedText = "";
 
             try {
                 byte[] keyBytes = Base64.getDecoder().decode(keyBase64);
@@ -32,14 +35,14 @@ public class DecryptUtil {
                 Cipher cipher = Cipher.getInstance(AES_ALGO);
                 cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, ivSpec);
                 byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
-                String decryptedText = new String(decryptedBytes);
-
-                System.out.println("✅ Decryption Success with Key (Path: " + binaryPath + "): " + decryptedText);
-                return decryptedText;
+                decryptedText = new String(decryptedBytes);
+                return new TupleDe<>(binaryPath, decryptedText);
             } catch (Exception e) {
-                System.out.println("❌ Decryption Failed with Key (Path: " + binaryPath + ")");
+                lastAttempt = new TupleDe<>(binaryPath, decryptedText);
             }
         }
-        return "❌ ERROR: Semua kemungkinan key gagal untuk dekripsi!";
+
+        // 🔹 Jika semua gagal, return hasil dekripsi terakhir yang dicoba
+        return (lastAttempt != null) ? lastAttempt : new TupleDe<>("❌", "ERROR: Tidak ada key yang valid!");
     }
 }

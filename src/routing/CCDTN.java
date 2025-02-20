@@ -3,40 +3,55 @@
  *
  * Copyright 2025 by Bryan (HaiPigGi-StackOverfloweds)
  *
+ * This class implements the routing logic for the CCDTN (Content-Centric DTN) router.
+ * It handles message forwarding, subscription-based content delivery, and secure decryption.
  */
+
 package routing;
 
-import KDC.Subscriber.BrokerHandler;
 import KDC.Subscriber.DecryptUtil;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import core.*;
 
 import java.util.*;
-
 import routing.community.Duration;
 import routing.util.TupleDe;
 
 public class CCDTN extends ActiveRouter {
 
-    // Create some initial variables
+    // Constant for storing message topics
     public static final String MESSAGE_TOPICS_S = "topic";
+
+    // Maps to store connection timestamps and history
     protected Map<DTNHost, Double> startTimestamps;
     protected Map<DTNHost, List<Duration>> connHistory;
 
+    /**
+     * Constructor: Initializes CCDTN with settings.
+     *
+     * @param s Settings object for configuration
+     */
     public CCDTN(Settings s) {
         super(s);
         this.startTimestamps = new HashMap<>();
         this.connHistory = new HashMap<>();
     }
 
-    // Copy constructor
+    /**
+     * Copy constructor: Creates a deep copy of an existing CCDTN router.
+     *
+     * @param c The CCDTN instance to copy
+     */
     protected CCDTN(CCDTN c) {
         super(c);
-        startTimestamps = new HashMap<>(c.startTimestamps);  // Deep copy of maps
-        connHistory = new HashMap<>(c.connHistory);           // Deep copy of maps
-
+        startTimestamps = new HashMap<>(c.startTimestamps);
+        connHistory = new HashMap<>(c.connHistory);
     }
 
+    /**
+     * Handles changes in connection status.
+     *
+     * @param con The connection that changed state
+     */
     @Override
     public void changedConnection(Connection con) {
         DTNHost peer = con.getOtherNode(getHost());
@@ -50,67 +65,46 @@ public class CCDTN extends ActiveRouter {
                 double time = startTimestamps.get(peer);
                 double etime = SimClock.getTime();
 
-                // Find or create the connection history list
-                List<Duration> history;
-                if (!connHistory.containsKey(peer)) {
-                    history = new LinkedList<>();
-                    connHistory.put(peer, history);
-                } else history = connHistory.get(peer);
+                // Retrieve or create connection history
+                List<Duration> history = connHistory.computeIfAbsent(peer, k -> new LinkedList<>());
 
-                // add this connection to the list
-                if (etime - time > 0) history.add(new Duration(time, etime));
+                // Add connection duration if it is valid
+                if (etime - time > 0) {
+                    history.add(new Duration(time, etime));
+                }
 
                 startTimestamps.remove(peer);
             }
         }
     }
 
-
-    protected boolean isFinalDest(Message m, DTNHost host,  Map<String, List<TupleDe<String, String>>> keyAuth) {
-        // Cek apakah host sudah subscribe ke final destination
+    /**
+     * Checks if a message has reached its final destination based on the subscriber's interest.
+     *
+     * @param m       The message being evaluated
+     * @param host    The host receiving the message
+     * @param keyAuth The map containing authentication keys for subscribers
+     * @return True if the message is at its final destination, false otherwise
+     */
+    protected boolean isFinalDest(Message m, DTNHost host, Map<String, List<TupleDe<String, String>>> keyAuth) {
         Map<Boolean, TupleDe<Integer, String>> finalDestMap = getTopicMap(m);
-
 
         if (finalDestMap == null || finalDestMap.isEmpty()) {
             return false;
         }
 
-
         List<Boolean> hostTopicNode = host.getOwnInterest();
         List<Double> hostWeightNode = host.getInterest();
 
-        if (hostTopicNode == null) hostTopicNode = new ArrayList<>();
-        if (hostWeightNode == null) hostWeightNode = new ArrayList<>();
-
-        if (hostTopicNode.isEmpty() || hostWeightNode.isEmpty()) {
+        if (hostTopicNode == null || hostWeightNode == null || hostTopicNode.isEmpty() || hostWeightNode.isEmpty()) {
             return false;
         }
 
-
         for (Map.Entry<Boolean, TupleDe<Integer, String>> entry : finalDestMap.entrySet()) {
-            List<Boolean> topicMsg = new LinkedList<>();
-            topicMsg.add(entry.getKey());
-            TupleDe<Integer, String> topic = entry.getValue();
-            String getMsg = topic.getSecond();
-
-
-            for (Boolean top : topicMsg) {
-                if (top == null) {
-                    return false;
-                }
-                // Cek apakah topik ini ada di hostTopicNode
-                if (hostTopicNode.contains(top)) {
-                    double weight = hostWeightNode.get(hostTopicNode.indexOf(entry.getKey()));
-                    if (weight > 0) { // Jika host sudah memiliki weight > 0 untuk topik ini
-                        boolean isSubscriberMatched = authenticateSubscriber(host, getMsg, keyAuth);
-                        if (isSubscriberMatched) {
-                            return true;
-                        }
-                        else {
-                            return false;
-                        }
-
-                    }
+            if (hostTopicNode.contains(entry.getKey())) {
+                double weight = hostWeightNode.get(hostTopicNode.indexOf(entry.getKey()));
+                if (weight > 0) { // Check if the topic weight is valid
+                    return authenticateSubscriber(host, entry.getValue().getSecond(), keyAuth);
                 }
             }
         }
@@ -118,6 +112,14 @@ public class CCDTN extends ActiveRouter {
         return false;
     }
 
+    /**
+     * Authenticates a subscriber by attempting to decrypt the received message using available keys.
+     *
+     * @param from    The DTNHost requesting authentication
+     * @param topicName The encrypted message
+     * @param keyAuth The map containing keys for decryption
+     * @return True if decryption is successful, false otherwise
+     */
     protected boolean authenticateSubscriber(DTNHost from, String topicName, Map<String, List<TupleDe<String, String>>> keyAuth) {
         for (Map.Entry<String, List<TupleDe<String, String>>> entry : keyAuth.entrySet()) {
             String subscriberId = entry.getKey();
@@ -131,24 +133,28 @@ public class CCDTN extends ActiveRouter {
                 String hostId = String.valueOf(getSub.getRouter().getHost());
 
                 if (getSub.isSubscriber() && getHost().getRouter() instanceof CCDTN && subscriberId.contains(hostId)) {
-                    String decryptedContent = DecryptUtil.decryptMessage(topicName, keyList);
+                    TupleDe<String, String> decryptedContent = DecryptUtil.decryptMessage(topicName, keyList);
 
-                    if (decryptedContent != null) {
-                        System.out.println("✅ Final Decryption Success: " + decryptedContent);
+                    // ✅ Ensure decryption is successful
+                    if (decryptedContent != null && !decryptedContent.getSecond().isEmpty()) {
+                        System.out.println("✅ Final Decryption Success with Path: " + decryptedContent.getFirst());
+                        System.out.println("🔹 Message: " + decryptedContent.getSecond());
                         return true;
                     }
                 }
             }
         }
 
+        System.out.println("❌ ERROR: No subscriber successfully decrypted the message!");
         return false;
     }
 
-
-
-
-
-
+    /**
+     * Retrieves the topic map from the given message.
+     *
+     * @param msg The message containing topic data
+     * @return A map of topic interests or null if retrieval fails
+     */
     protected Map<Boolean, TupleDe<Integer, String>> getTopicMap(Message msg) {
         try {
             return (Map<Boolean, TupleDe<Integer, String>>) msg.getProperty(MESSAGE_TOPICS_S);
@@ -158,44 +164,48 @@ public class CCDTN extends ActiveRouter {
         }
     }
 
+    /**
+     * Determines if a host shares the same interests as a message.
+     *
+     * @param m    The message being evaluated
+     * @param host The host to check
+     * @return True if interests match, false otherwise
+     */
     protected boolean isSameInterest(Message m, DTNHost host) {
-        // Get the topics from the message
         Map<Boolean, TupleDe<Integer, String>> topicMap = getTopicMap(m);
 
         if (topicMap == null || topicMap.isEmpty()) {
             return false;
         }
 
-        // Get the host's interests
         List<Boolean> topicNode = host.getOwnInterest();
-
         if (topicNode == null) {
             return false;
         }
 
-        // Iterate through the topic map and check for matches
-        for (Map.Entry<Boolean, TupleDe<Integer, String>> entry : topicMap.entrySet()) {
-                List<Boolean> topicMsgList = new LinkedList<>();
-                topicMsgList.add(entry.getKey());
-
-                for (Boolean top : topicMsgList) {
-                    if (topicNode.contains(top)) {
-                        return true;
-                    }
-                }
+        for (Boolean topic : topicMap.keySet()) {
+            if (topicNode.contains(topic)) {
+                return true;
+            }
         }
 
-        return false; // No match found
+        return false;
     }
 
-
+    /**
+     * Counts the interest weights that match the message topics.
+     *
+     * @param m    The message being evaluated
+     * @param host The host whose interests are being compared
+     * @return A list of matching interest weights
+     */
     protected List<Double> countInterestTopic(Message m, DTNHost host) {
         Map<Boolean, TupleDe<Integer, String>> topicMap = getTopicMap(m);
+
         if (topicMap == null || topicMap.isEmpty()) {
             return null;
         }
 
-        // Get the host's interests and weights
         List<Boolean> topicNode = host.getOwnInterest();
         List<Double> weightNode = host.getInterest();
 
@@ -203,46 +213,43 @@ public class CCDTN extends ActiveRouter {
             return null;
         }
 
-        // Initialize a list to store the matching weights
         List<Double> valInterest = new ArrayList<>();
-
-        Iterator<Map.Entry<Boolean, TupleDe<Integer, String>>> iterator = topicMap.entrySet().iterator();
-
-        while (iterator.hasNext()) {
-            Map.Entry<Boolean, TupleDe<Integer, String>> entry = iterator.next();
-
-            // Check if the current interest exists in host's interests
-            if (topicNode.contains(entry.getKey())) {
-                valInterest.add(weightNode.get(topicNode.indexOf(entry.getKey())));
+        for (Boolean topic : topicMap.keySet()) {
+            if (topicNode.contains(topic)) {
+                valInterest.add(weightNode.get(topicNode.indexOf(topic)));
             }
         }
 
         return valInterest;
     }
 
-
+    /**
+     * Updates the router's state and handles message exchanges.
+     */
     @Override
     public void update() {
         super.update();
-//        System.out.println("update 1");
 
         if (isTransferring() || !canStartTransfer()) {
-            return; // transferring, don't try other connections yet
+            return; // If transferring, don't start another transfer
         }
 
-        // Try first the messages that can be delivered to final recipient
+        // Deliver messages to their final recipients
         if (exchangeDeliverableMessages() != null) {
-            return; // started a transfer, don't try others (yet)
+            return;
         }
 
-        // then try any/all message to any/all connection
+        // Try forwarding messages to all possible connections
         this.tryAllMessagesToAllConnections();
     }
 
+    /**
+     * Creates a replica of this router.
+     *
+     * @return A new instance of CCDTN
+     */
     @Override
     public MessageRouter replicate() {
         return new CCDTN(this);
     }
-
-
 }

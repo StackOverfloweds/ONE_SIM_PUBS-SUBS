@@ -1,22 +1,35 @@
 package KDC.NAKT;
 
 import routing.util.TupleDe;
-
 import java.util.*;
 
-public class NAKTBuilder {
+public class NAKTBuilder extends KeyManager {
     private final int lcnum;
-    private final KeyManager keyManager;
     private final Map<String, TupleDe<String, String>> encryptedKeyMap;
     private final Map<String, List<TupleDe<String, String>>> subscriberKeyMap;
 
+    /**
+     * Constructor for NAKTBuilder.
+     * Initializes the encryption and subscription key maps.
+     *
+     * @param lcnum The maximum binary depth for key tree generation.
+     */
     public NAKTBuilder(int lcnum) {
+        super(); // Call parent constructor of KeyManager
         this.lcnum = lcnum;
-        this.keyManager = new KeyManager();
         this.encryptedKeyMap = new HashMap<>();
         this.subscriberKeyMap = new HashMap<>();
     }
 
+    /**
+     * Builds the NAKT key structure.
+     * - Generates keys for publishers and subscribers.
+     * - Assigns appropriate encryption keys to topics and attributes.
+     *
+     * @param subscriberTopicMap  Map containing subscriber topics and their attributes.
+     * @param existingAttributes  List of numeric attributes used for key derivation.
+     * @return true if the NAKT key structure is successfully built, false otherwise.
+     */
     public boolean buildNAKT(Map<TupleDe<String, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, String>>> subscriberTopicMap,
                              List<TupleDe<Integer, Integer>> existingAttributes) {
         if (subscriberTopicMap == null || subscriberTopicMap.isEmpty() || existingAttributes == null || existingAttributes.isEmpty()) {
@@ -36,7 +49,7 @@ public class NAKTBuilder {
 
             // 🔹 **Generate Publisher Key**
             if (!encryptedKeyMap.containsKey(publisherID)) {
-                String rootKey = keyManager.generateRootKey(num);
+                String rootKey = generateRootKey(num);
                 List<TupleDe<String, String>> keyList = new ArrayList<>();
                 encryptTreeNodes(0, getNearestPowerOfTwo(num) - 1, rootKey, "", 1, keyList);
 
@@ -57,35 +70,34 @@ public class NAKTBuilder {
                 String closestBinaryPath = null;
                 int maxDepth = -1;
 
-                // **Hitung key tree sekali saja untuk semua range**
+                // **Calculate key tree once for all attribute ranges**
                 List<TupleDe<String, String>> keyList = new ArrayList<>();
-                String rootKey = keyManager.generateRootKey(num);
+                String rootKey = generateRootKey(num);
                 encryptTreeNodes(0, getNearestPowerOfTwo(num) - 1, rootKey, "", 1, keyList);
 
                 for (TupleDe<Integer, Integer> range : existingAttributes) {
                     int minValue = range.getFirst();
                     int maxValue = range.getSecond();
 
-                    // **Cari key dengan binary path yang paling mendekati dari bawah**
+                    // **Find the closest matching binary path**
                     for (int i = minValue; i <= maxValue; i++) {
                         String binaryPathSubs = Integer.toBinaryString(i);
 
                         for (TupleDe<String, String> keyTuple : keyList) {
-                            String currentBinaryPath = keyTuple.getFirst(); // 🔹 Binary Path
-                            String currentKey = keyTuple.getSecond(); // 🔹 Key-nya
-//                            System.out.println("get binary path: " + currentBinaryPath);
-                            // **Pastikan binary path tidak selalu "1111"**
+                            String currentBinaryPath = keyTuple.getFirst();
+                            String currentKey = keyTuple.getSecond();
+
                             if (binaryPathSubs.startsWith(currentBinaryPath)) {
                                 int currentDepth = currentBinaryPath.length();
 
-                                // **Jika menemukan kedalaman lebih dalam, reset key yang lebih dangkal**
+                                // **If a deeper key is found, reset shallower keys**
                                 if (currentDepth > maxDepth) {
                                     maxDepth = currentDepth;
                                     derivedKeys.clear();
                                     closestBinaryPath = currentBinaryPath;
                                 }
 
-                                // **Tambahkan key jika kedalaman cocok & belum ada dalam daftar**
+                                // **Add key if depth matches maxDepth and it's not duplicated**
                                 boolean keyExists = derivedKeys.stream()
                                         .anyMatch(tuple -> tuple.getFirst().equals(currentBinaryPath) &&
                                                 tuple.getSecond().equals(currentKey));
@@ -95,11 +107,10 @@ public class NAKTBuilder {
                                 }
                             }
                         }
-
                     }
                 }
 
-                // 🔹 **Ambil semua turunan dari key yang ditemukan**
+                // 🔹 **Add all children of the selected binary path**
                 if (closestBinaryPath != null) {
                     for (TupleDe<String, String> keyTuple : keyList) {
                         if (keyTuple.getFirst().startsWith(closestBinaryPath) && !derivedKeys.contains(keyTuple)) {
@@ -116,7 +127,18 @@ public class NAKTBuilder {
         return true;
     }
 
-
+    /**
+     * Encrypts tree nodes recursively to generate key hierarchies.
+     * - Each node creates left and right children in a binary tree format.
+     * - Stops at the defined depth (lcnum).
+     *
+     * @param min        The minimum range for encryption.
+     * @param max        The maximum range for encryption.
+     * @param parentKey  The key from the parent node.
+     * @param binaryPath The binary path of the node.
+     * @param depth      The current tree depth.
+     * @param keyList    The list to store generated keys.
+     */
     private void encryptTreeNodes(int min, int max, String parentKey, String binaryPath, int depth, List<TupleDe<String, String>> keyList) {
         if (depth > lcnum || min >= max) return;
 
@@ -124,37 +146,41 @@ public class NAKTBuilder {
         String leftPath = binaryPath + "0";
         String rightPath = binaryPath + "1";
 
-        String leftKey = keyManager.generateChildKey(parentKey, leftPath);
-        String rightKey = keyManager.generateChildKey(parentKey, rightPath);
+        String leftKey = generateChildKey(parentKey, leftPath);
+        String rightKey = generateChildKey(parentKey, rightPath);
 
-        // 🔹 **Pastikan hanya path yang sesuai dengan publisher/subscriber yang diambil**
+        // 🔹 **Ensure only relevant paths are taken**
         if (leftPath.length() == lcnum) keyList.add(new TupleDe<>(leftPath, leftKey));
         if (rightPath.length() == lcnum) keyList.add(new TupleDe<>(rightPath, rightKey));
 
-        // 🔹 **Logging Debugging**
-//        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
-//        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
-//        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);
-
-        // 🔹 **Rekursif untuk menelusuri semua kemungkinan path**
+        // 🔹 **Recursive call to generate deeper key nodes**
         encryptTreeNodes(min, mid, leftKey, leftPath, depth + 1, keyList);
         encryptTreeNodes(mid + 1, max, rightKey, rightPath, depth + 1, keyList);
     }
 
-
-
-
-
+    /**
+     * Retrieves the generated encryption keys for publishers.
+     *
+     * @return A map containing publisher IDs and their encryption keys.
+     */
     public Map<String, TupleDe<String, String>> getKeysForPublisher() {
         return this.encryptedKeyMap;
     }
 
+    /**
+     * Retrieves the generated authentication keys for subscribers.
+     *
+     * @return A map containing subscriber IDs and their list of authentication keys.
+     */
     public Map<String, List<TupleDe<String, String>>> getKeysForSubscriber() {
         return this.subscriberKeyMap;
     }
 
     /**
-     * Function to find the nearest power of two greater than or equal to the given value.
+     * Finds the nearest power of two that is greater than or equal to the given value.
+     *
+     * @param value The input integer.
+     * @return The nearest power of two.
      */
     private int getNearestPowerOfTwo(int value) {
         int power = 1;
@@ -164,3 +190,10 @@ public class NAKTBuilder {
         return power;
     }
 }
+
+
+
+// 🔹 **Logging Debugging**
+//        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
+//        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
+//        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);

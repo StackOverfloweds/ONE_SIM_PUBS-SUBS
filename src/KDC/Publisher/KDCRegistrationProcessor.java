@@ -11,11 +11,14 @@ import routing.PublishAndSubscriberRouting;
 public class KDCRegistrationProcessor {
     private Map<Integer, List<TupleDe<Boolean, String>>> registeredTopics;
 
+    /**
+     * Constructor for KDCRegistrationProcessor.
+     * Initializes the registered topics by retrieving data from the `PublishAndSubscriberRouting` class.
+     */
     public KDCRegistrationProcessor() {
         // Initialize the registered topics from PublishAndSubscriberRouting
         this.registeredTopics = PublishAndSubscriberRouting.registeredTopics;
     }
-
     /**
      * Processes the topic registration at the KDC and returns the updated map of registered topics.
      *

@@ -10,16 +10,19 @@ import KDC.Publisher.BrokerRegistrationHandler;
 import KDC.Publisher.EncryptionUtil;
 import KDC.Publisher.KDCRegistrationProcessor;
 import KDC.Subscriber.BrokerHandler;
-import KDC.Subscriber.DecryptUtil;
 import KDC.Subscriber.SubscriptionManager;
 import core.*;
 import routing.util.TupleDe;
 
 import java.util.*;
 
-
+/**
+ * PublishAndSubscriberRouting implements a topic-based Publish-Subscribe routing mechanism
+ * for Delay-Tolerant Networks (DTNs). It manages secure encryption, subscriber authentication,
+ * and message forwarding using Numeric Attribute Key Trees (NAKT).
+ */
 public class PublishAndSubscriberRouting extends CCDTN {
-
+    // Maps for managing topics, subscriptions, encryption, and authentication keys
     public static Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics; // key for the topic and id of subscriber, value is for list of numeric atribute
     public static Map<Integer, List<TupleDe<Boolean, String>>> registeredTopics;
     public static Map<String, TupleDe<String, String>> keyEncryption;
@@ -35,8 +38,10 @@ public class PublishAndSubscriberRouting extends CCDTN {
     private int dataReceived = 0;
     private int dataTransferred = 0;
 
-    public KDCRegistrationProcessor processor = new KDCRegistrationProcessor();
-    public BrokerHandler brokerHandler = new BrokerHandler();
+    // Handlers for registration and subscription management
+    private KDCRegistrationProcessor processor;
+    private BrokerHandler brokerHandler;
+
 
     /**
      * namespace settings ({@value})
@@ -44,11 +49,18 @@ public class PublishAndSubscriberRouting extends CCDTN {
     private static final String PUBSROUTING_NS = "PublishAndSubscriberRouting";
     protected static final String LCNUM = "LCNUM";
 
+    /**
+     * Constructor: Initializes PublishAndSubscriberRouting with settings, topic registration,
+     * encryption, and subscriber authentication details.
+     *
+     * @param s Settings object for configuring the routing mechanism.
+     */
     public PublishAndSubscriberRouting(Settings s) {
         // Call the superclass constructor to initialize inherited fields
         super(s);
         Settings ccSettings = new Settings(PUBSROUTING_NS);
         lcnum = ccSettings.getInt(LCNUM);
+        initNAKT();
         // Ensure keyEncryption is initialized
         if (keyEncryption == null) {
             keyEncryption = new HashMap<>();
@@ -98,10 +110,16 @@ public class PublishAndSubscriberRouting extends CCDTN {
         }
     }
 
+    /**
+     * Copy Constructor: Creates a deep copy of an existing PublishAndSubscriberRouting instance.
+     *
+     * @param r The instance to be copied.
+     */
     protected PublishAndSubscriberRouting(PublishAndSubscriberRouting r) {
         // Call the superclass copy constructor
         super(r);
         lcnum = r.lcnum;
+        initNAKT();
 
         // Handle keyEncryption copy similarly
         if (r.keyEncryption == null) {
@@ -149,7 +167,21 @@ public class PublishAndSubscriberRouting extends CCDTN {
         }
     }
 
+    /**
+     * Initializes the Numeric Attribute Key Tree (NAKT) processors.
+     */
+    private void initNAKT() {
+        this.processor = new KDCRegistrationProcessor();
+        this.brokerHandler = new BrokerHandler();
+    }
 
+    /**
+     * Handles connection changes between hosts.
+     * If a connection is established, registers the publisher with the broker
+     * and checks the subscriber's interests.
+     *
+     * @param con The connection that has changed.
+     */
     @Override
     public void changedConnection(Connection con) {
         super.changedConnection(con);
@@ -167,6 +199,14 @@ public class PublishAndSubscriberRouting extends CCDTN {
         }
     }
 
+    /**
+     * Creates a new message to be published.
+     * Ensures that the host is registered and encrypts the message
+     * before adding it to the message queue.
+     *
+     * @param msg The message object to be created.
+     * @return true if the message is successfully created, false otherwise.
+     */
     @Override
     public boolean createNewMessage(Message msg) {
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
@@ -256,11 +296,13 @@ public class PublishAndSubscriberRouting extends CCDTN {
 
 
     /**
-     * metode in routing publishAndSubscriberRouting
+     * Handles the transfer of messages between hosts.
+     * If the message is destined for a registered subscriber,
+     * it verifies authentication before final delivery.
      *
-     * @param id   Id of the transferred message
-     * @param from Host the message was from (previous hop)
-     * @return
+     * @param id   The ID of the transferred message.
+     * @param from The sender host of the message.
+     * @return The message object after transfer.
      */
     @Override
     public Message messageTransferred(String id, DTNHost from) {
@@ -301,8 +343,7 @@ public class PublishAndSubscriberRouting extends CCDTN {
 
         Message aMessage = (outgoing == null) ? incoming : outgoing;
         boolean isFinalRecipient = isFinalDest(aMessage, getHost(), keyAuthentication);
-        boolean isFirstDelivery = isFinalRecipient &&
-                !isDeliveredMessage(aMessage);
+        boolean isFirstDelivery = isFinalRecipient && !isDeliveredMessage(aMessage);
 
 
         if (outgoing != null && !isFinalRecipient) {
@@ -322,6 +363,12 @@ public class PublishAndSubscriberRouting extends CCDTN {
         return aMessage;
     }
 
+    /**
+     * Handles the final steps after a message transfer is completed.
+     * Increments counters for successful message transfers.
+     *
+     * @param con The connection involved in the message transfer.
+     */
     @Override
     protected void transferDone(Connection con) {
         if (con == null || con.getMessage() == null) {
@@ -334,9 +381,8 @@ public class PublishAndSubscriberRouting extends CCDTN {
     }
 
     /**
-     * Comparator untuk sorting message berdasarkan
-     * Interest Similarity tertinggi
-     * Sort DESC
+     * Comparator for sorting messages based on the highest interest similarity.
+     * Messages with a higher interest similarity will be prioritized (sorted in descending order).
      */
     private class InterestSimilarityComparator implements Comparator<Tuple<Message, Connection>> {
         @Override
@@ -348,7 +394,12 @@ public class PublishAndSubscriberRouting extends CCDTN {
         }
     }
 
-    // Helper method to sum list of interests (probabilities or matching scores)
+    /**
+     * Helper method to sum the values in a list of interest similarity scores.
+     *
+     * @param lists A list of interest similarity values.
+     * @return The total sum of all values in the list.
+     */
     private double sumList(List<Double> lists) {
         double total = 0.0;
         for (double lst : lists) {
@@ -357,7 +408,12 @@ public class PublishAndSubscriberRouting extends CCDTN {
         return total;
     }
 
-
+    /**
+     * The main update method that gets called periodically.
+     * - Checks if the router is currently transferring data or cannot start a new transfer.
+     * - Tries to deliver messages to final recipients first.
+     * - If no final recipient is found, attempts to transfer messages to other connected nodes.
+     */
     @Override
     public void update() {
         super.update();
@@ -376,7 +432,14 @@ public class PublishAndSubscriberRouting extends CCDTN {
         tryOtherMessages();
     }
 
-
+    /**
+     * Attempts to transfer messages to other nodes based on interest similarity.
+     * - Scans all connections for potential recipients.
+     * - Checks if the other node is a subscriber.
+     * - Sorts messages based on interest similarity and attempts to transfer them.
+     *
+     * @return The message that was successfully transferred, or null if no transfer occurred.
+     */
     private Tuple<Message, Connection> tryOtherMessages() {
         List<Tuple<Message, Connection>> messages = new ArrayList<>();
         List<Tuple<Message, Connection>> tempMessages = new ArrayList<>();
@@ -423,13 +486,11 @@ public class PublishAndSubscriberRouting extends CCDTN {
             }
         }
 
-
         // Sort messages based on interest similarity
         Collections.sort(tempMessages, new InterestSimilarityComparator());
 
         messages.addAll(tempMessages);
         tempMessages.clear();
-
 
         // If no messages are found, return null
         if (messages.isEmpty()) {
@@ -440,27 +501,50 @@ public class PublishAndSubscriberRouting extends CCDTN {
         return tryMessagesForConnected(messages);
     }
 
+    /**
+     * Gets the total amount of data received by this router.
+     *
+     * @return The total amount of received data.
+     */
     public int getTotalDataRcv() {
         return this.dataReceived;
     }
 
+    /**
+     * Gets the total amount of data transferred by this router.
+     *
+     * @return The total amount of transferred data.
+     */
     public int getTotalDataTrf() {
         return this.dataTransferred;
     }
 
+    /**
+     * Gets the total number of messages received by this router.
+     *
+     * @return The total number of received messages.
+     */
     public int getMsgReceived() {
         return this.msgReceived;
     }
 
+    /**
+     * Gets the total number of messages transferred by this router.
+     *
+     * @return The total number of transferred messages.
+     */
     public int getMsgTransferred() {
         return this.msgTransferred;
     }
 
-    // Method to replicate the router
+    /**
+     * Creates a duplicate of the current router instance.
+     *
+     * @return A new instance of PublishAndSubscriberRouting with the same properties.
+     */
     @Override
     public MessageRouter replicate() {
         return new PublishAndSubscriberRouting(this);
     }
-
 
 }
