@@ -64,7 +64,7 @@ public class DTNHost implements Comparable<DTNHost> {
 
     // create variable for publsiher
     private boolean topicValue;
-    private int subTopicValue ;
+    private int subTopicValue;
 
     // Variabel flag untuk memastikan hanya satu topik yang diberikan
     private boolean isTopicAssigned = false;
@@ -86,11 +86,7 @@ public class DTNHost implements Comparable<DTNHost> {
      * @param mmProto      Prototype of the movement model of this host
      * @param mRouterProto Prototype of the message router of this host
      */
-    public DTNHost(List<MessageListener> msgLs,
-                   List<MovementListener> movLs,
-                   String groupId, List<NetworkInterface> interf,
-                   ModuleCommunicationBus comBus,
-                   MovementModel mmProto, MessageRouter mRouterProto) {
+    public DTNHost(List<MessageListener> msgLs, List<MovementListener> movLs, String groupId, List<NetworkInterface> interf, ModuleCommunicationBus comBus, MovementModel mmProto, MessageRouter mRouterProto) {
         this.comBus = comBus;
         this.location = new Coord(0, 0);
         this.address = getNextAddress();
@@ -102,8 +98,7 @@ public class DTNHost implements Comparable<DTNHost> {
         this.isBroker = false;
         this.isKDC = false;
 
-        // create role for pubs-subs with group
-
+        // Create roles for Pub-Sub entities with group-based identification.
         if (groupId.startsWith("S")) {
             isSubscriber = true;
             name = "Subscriber_" + groupId + "_" + address;
@@ -117,48 +112,48 @@ public class DTNHost implements Comparable<DTNHost> {
             isKDC = true;
             name = "KDC_" + groupId + "_" + address;
         } else {
-            // Jika GroupID tidak sesuai dengan peran yang ditentukan
+            // If GroupID does not match any predefined roles, throw an exception.
             throw new IllegalArgumentException("Invalid GroupID: " + groupId);
         }
+
         Random random = new Random();
-        // create subscriber interest for something random
+
+        // ✅ **Initialize subscriber attributes if the entity is a subscriber**
         if (isSubscriber) {
             ownInterest = new ArrayList<>();
             interest = new ArrayList<>();
             numericAtribute = new ArrayList<>();
             numericAtribute2 = new ArrayList<>();
 
-            // Randomly choose to use numericAtribute for two values or default (0,0)
+            // ✅ **Randomly determine if numericAtribute should store a min-max range or default (0,0)**
             if (random.nextBoolean()) {
-                int min = random.nextInt(30); // Generate random min value between 0 and 30
+                int min = random.nextInt(30); // Generate a random min value between 0 and 30
                 int max = random.nextInt(30 - min) + min; // Generate max value between min and 30
                 numericAtribute.add(new TupleDe<>(min, max));
             } else {
-                numericAtribute.add(new TupleDe<>(0, 0));
+                numericAtribute.add(new TupleDe<>(0, 0)); // Default range (0,0)
             }
 
-            // Randomly decide if numericAtribute2 should have a value or be null
+            // ✅ **Randomly determine if numericAtribute2 should hold a value or be null**
             if (random.nextBoolean()) {
-                numericAtribute2.add(random.nextInt(30)); // Random value between 0 and 29
+                numericAtribute2.add(random.nextInt(30)); // Assign a random value between 0 and 29
             } else {
                 numericAtribute2.add(null); // Set to null randomly
             }
 
-            // Randomly set ownInterest and interest
+            // ✅ **Randomly assign subscriber interest**
             boolean isInterested = random.nextBoolean();
-            ownInterest.add(isInterested);
-            interest.add(isInterested ? 0.5 : 0.0);
+            ownInterest.add(isInterested); // Add interest status (true/false)
+            interest.add(isInterested ? 0.5 : 0.0); // Assign a weight based on interest
         }
 
-
-
-        // we gonna create some topic and sub topic for each pulisher
-        // Ensure a single topicValue and subTopicValue for each publisher
+        // ✅ **Assign a topic and sub-topic only if the entity is a publisher**
         if (isPublisher && !isTopicAssigned) {
-            this.topicValue = random.nextBoolean();
-            this.subTopicValue = random.nextInt(29) + 1;
-            this.isTopicAssigned = true;
+            this.topicValue = random.nextBoolean(); // Randomly assign a boolean topic value
+            this.subTopicValue = random.nextInt(29) + 1; // Assign a sub-topic ID between 1 and 29
+            this.isTopicAssigned = true; // Mark that the topic has been assigned
         }
+
 
         for (NetworkInterface i : interf) {
             NetworkInterface ni = i.replicate();
@@ -407,8 +402,7 @@ public class DTNHost implements Comparable<DTNHost> {
     /**
      * Force a connection event
      */
-    public void forceConnection(DTNHost anotherHost, String interfaceId,
-                                boolean up) {
+    public void forceConnection(DTNHost anotherHost, String interfaceId, boolean up) {
         NetworkInterface ni;
         NetworkInterface no;
 
@@ -422,8 +416,7 @@ public class DTNHost implements Comparable<DTNHost> {
             ni = getInterface(1);
             no = anotherHost.getInterface(1);
 
-            assert (ni.getInterfaceType().equals(no.getInterfaceType())) :
-                    "Interface types do not match.  Please specify interface type explicitly";
+            assert (ni.getInterfaceType().equals(no.getInterfaceType())) : "Interface types do not match.  Please specify interface type explicitly";
         }
 
         if (up) {
@@ -437,9 +430,7 @@ public class DTNHost implements Comparable<DTNHost> {
      * for tests only --- do not use!!!
      */
     public void connect(DTNHost h) {
-        System.err.println(
-                "WARNING: using deprecated DTNHost.connect(DTNHost)"
-                        + "\n Use DTNHost.forceConnection(DTNHost,null,true) instead");
+        System.err.println("WARNING: using deprecated DTNHost.connect(DTNHost)" + "\n Use DTNHost.forceConnection(DTNHost,null,true) instead");
         forceConnection(h, null, true);
     }
 
@@ -495,10 +486,8 @@ public class DTNHost implements Comparable<DTNHost> {
         }
 
         // move towards the point for possibleMovement amount
-        dx = (possibleMovement / distance) * (this.destination.getX()
-                - this.location.getX());
-        dy = (possibleMovement / distance) * (this.destination.getY()
-                - this.location.getY());
+        dx = (possibleMovement / distance) * (this.destination.getX() - this.location.getX());
+        dy = (possibleMovement / distance) * (this.destination.getY() - this.location.getY());
         this.location.translate(dx, dy);
     }
 
@@ -664,46 +653,89 @@ public class DTNHost implements Comparable<DTNHost> {
         }
         return cek.toString();
     }
+    // ✅ **Identify the role of the entity in the Publish-Subscribe system**
 
-    // identified the publish, broker, subscriber and KDC
+    /**
+     * Checks if the current entity is a Publisher.
+     * @return true if the entity is a Publisher, otherwise false.
+     */
     public boolean isPublisher() {
         return this.isPublisher;
     }
 
+    /**
+     * Checks if the current entity is a Broker.
+     * @return true if the entity is a Broker, otherwise false.
+     */
     public boolean isBroker() {
         return this.isBroker;
-
     }
 
+    /**
+     * Checks if the current entity is a Subscriber.
+     * @return true if the entity is a Subscriber, otherwise false.
+     */
     public boolean isSubscriber() {
         return this.isSubscriber;
     }
 
+    /**
+     * Checks if the current entity is a Key Distribution Center (KDC).
+     * @return true if the entity is a KDC, otherwise false.
+     */
     public boolean isKDC() {
         return this.isKDC;
     }
 
+    // ✅ **Retrieve the interest and attributes of a Subscriber**
+
+    /**
+     * Retrieves the interest levels of the Subscriber.
+     * @return A list of interest weights assigned to topics.
+     */
     public List<Double> getInterest() {
         return this.interest;
     }
 
+    /**
+     * Retrieves the topics the Subscriber is interested in.
+     * @return A list of boolean values representing topic interests.
+     */
     public List<Boolean> getOwnInterest() {
         return this.ownInterest;
     }
 
+    /**
+     * Retrieves the numeric attribute range of the Subscriber.
+     * @return A list of TupleDe containing min-max values of the numeric attribute.
+     */
     public List<TupleDe<Integer, Integer>> getNumericAtribute() {
         return this.numericAtribute;
     }
 
+    /**
+     * Retrieves the second numeric attribute of the Subscriber.
+     * @return A list of integer values representing numeric attributes.
+     */
     public List<Integer> getNumericAtribute2() {
         return this.numericAtribute2;
     }
 
+    // ✅ **Retrieve Publisher-related topic information**
+
+    /**
+     * Retrieves the sub-topic value assigned to the entity.
+     * @return The sub-topic ID as an integer.
+     */
     public int getSubTopic() {
         return this.subTopicValue;
     }
 
-    public boolean getTopicValue () {
+    /**
+     * Retrieves the main topic value assigned to the entity.
+     * @return A boolean representing whether the entity is assigned a topic.
+     */
+    public boolean getTopicValue() {
         return this.topicValue;
     }
 
