@@ -57,17 +57,13 @@ public class DTNHost implements Comparable<DTNHost> {
     private boolean isSubscriber = false;
     private boolean isKDC = false;
     // kdc is key distributed center for key management of content publisher
-    private List<Double> interest;
-    private List<Boolean> ownInterest;
+    private List<Double> socialProfile;
+    private List<Boolean> socialProfileOI;
     private List<TupleDe<Integer, Integer>> numericAtribute; //min max atribute value of int
-    private List<Integer> numericAtribute2;
 
     // create variable for publsiher
-    private boolean topicValue;
-    private int subTopicValue;
-
-    // Variabel flag untuk memastikan hanya satu topik yang diberikan
-    private boolean isTopicAssigned = false;
+    private List<Boolean> topicValues;
+    private List<Integer> subTopicValues;
 
 
     static {
@@ -117,41 +113,46 @@ public class DTNHost implements Comparable<DTNHost> {
         }
 
         Random random = new Random();
+        this.topicValues = new ArrayList<>();
+        this.subTopicValues = new ArrayList<>();
 
+        this.socialProfile = new ArrayList<>();
+        this.socialProfileOI = new ArrayList<>();
+        this.numericAtribute = new ArrayList<>();
+
+        if (isPublisher) {
+            int index = 0;
+            while (index < 5) {
+                if (random.nextBoolean()) {
+                    // if true add
+                    topicValues.add(true);
+                    subTopicValues.add(random.nextInt(29) + 1);
+                } else {
+                    topicValues.add(false);
+                    subTopicValues.add(0);
+                }
+                index++;
+            }
+        }
         // ✅ **Initialize subscriber attributes if the entity is a subscriber**
         if (isSubscriber) {
-            ownInterest = new ArrayList<>();
-            interest = new ArrayList<>();
-            numericAtribute = new ArrayList<>();
-            numericAtribute2 = new ArrayList<>();
-
-            // ✅ **Randomly determine if numericAtribute should store a min-max range or default (0,0)**
-            if (random.nextBoolean()) {
-                int min = random.nextInt(30); // Generate a random min value between 0 and 30
-                int max = random.nextInt(30 - min) + min; // Generate max value between min and 30
-                numericAtribute.add(new TupleDe<>(min, max));
-            } else {
-                numericAtribute.add(new TupleDe<>(0, 0)); // Default range (0,0)
+            int index = 0;
+            while (index < 5) {
+                // ✅ **Randomly determine if numericAtribute should store a min-max range or default (0,0)**
+                if (random.nextBoolean()) {
+                    int min = random.nextInt(30); // Generate a random min value between 0 and 30
+                    int max = random.nextInt(30 - min) + min; // Generate max value between min and 30
+                    numericAtribute.add(new TupleDe<>(min, max));
+                    socialProfileOI.add(true);
+                    socialProfile.add(0.5); // weight true = 0.5
+                } else {
+                    numericAtribute.add(new TupleDe<>(0, 0)); // Default range (0,0)
+                    socialProfileOI.add(false);
+                    socialProfile.add(0.0); // weight true = 0.5
+                }
+                index++;
             }
 
-            // ✅ **Randomly determine if numericAtribute2 should hold a value or be null**
-            if (random.nextBoolean()) {
-                numericAtribute2.add(random.nextInt(30)); // Assign a random value between 0 and 29
-            } else {
-                numericAtribute2.add(null); // Set to null randomly
-            }
-
-            // ✅ **Randomly assign subscriber interest**
-            boolean isInterested = random.nextBoolean();
-            ownInterest.add(isInterested); // Add interest status (true/false)
-            interest.add(isInterested ? 0.5 : 0.0); // Assign a weight based on interest
-        }
-
-        // ✅ **Assign a topic and sub-topic only if the entity is a publisher**
-        if (isPublisher && !isTopicAssigned) {
-            this.topicValue = random.nextBoolean(); // Randomly assign a boolean topic value
-            this.subTopicValue = random.nextInt(29) + 1; // Assign a sub-topic ID between 1 and 29
-            this.isTopicAssigned = true; // Mark that the topic has been assigned
         }
 
 
@@ -657,6 +658,7 @@ public class DTNHost implements Comparable<DTNHost> {
 
     /**
      * Checks if the current entity is a Publisher.
+     *
      * @return true if the entity is a Publisher, otherwise false.
      */
     public boolean isPublisher() {
@@ -665,6 +667,7 @@ public class DTNHost implements Comparable<DTNHost> {
 
     /**
      * Checks if the current entity is a Broker.
+     *
      * @return true if the entity is a Broker, otherwise false.
      */
     public boolean isBroker() {
@@ -673,6 +676,7 @@ public class DTNHost implements Comparable<DTNHost> {
 
     /**
      * Checks if the current entity is a Subscriber.
+     *
      * @return true if the entity is a Subscriber, otherwise false.
      */
     public boolean isSubscriber() {
@@ -681,6 +685,7 @@ public class DTNHost implements Comparable<DTNHost> {
 
     /**
      * Checks if the current entity is a Key Distribution Center (KDC).
+     *
      * @return true if the entity is a KDC, otherwise false.
      */
     public boolean isKDC() {
@@ -691,52 +696,50 @@ public class DTNHost implements Comparable<DTNHost> {
 
     /**
      * Retrieves the interest levels of the Subscriber.
+     *
      * @return A list of interest weights assigned to topics.
      */
-    public List<Double> getInterest() {
-        return this.interest;
+    public List<Double> getSocialProfile() {
+        return this.socialProfile;
     }
 
     /**
      * Retrieves the topics the Subscriber is interested in.
+     *
      * @return A list of boolean values representing topic interests.
      */
-    public List<Boolean> getOwnInterest() {
-        return this.ownInterest;
+    public List<Boolean> getSocialProfileOI() {
+        return this.socialProfileOI;
     }
 
     /**
      * Retrieves the numeric attribute range of the Subscriber.
+     *
      * @return A list of TupleDe containing min-max values of the numeric attribute.
      */
     public List<TupleDe<Integer, Integer>> getNumericAtribute() {
         return this.numericAtribute;
     }
 
-    /**
-     * Retrieves the second numeric attribute of the Subscriber.
-     * @return A list of integer values representing numeric attributes.
-     */
-    public List<Integer> getNumericAtribute2() {
-        return this.numericAtribute2;
-    }
 
     // ✅ **Retrieve Publisher-related topic information**
 
     /**
      * Retrieves the sub-topic value assigned to the entity.
+     *
      * @return The sub-topic ID as an integer.
      */
-    public int getSubTopic() {
-        return this.subTopicValue;
+    public List<Integer> getSubTopic() {
+        return subTopicValues;
     }
 
     /**
      * Retrieves the main topic value assigned to the entity.
+     *
      * @return A boolean representing whether the entity is assigned a topic.
      */
-    public boolean getTopicValue() {
-        return this.topicValue;
+    public List<Boolean> getTopicValue() {
+        return topicValues;
     }
 
 

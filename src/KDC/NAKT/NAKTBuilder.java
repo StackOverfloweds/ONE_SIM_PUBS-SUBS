@@ -1,12 +1,13 @@
 package KDC.NAKT;
 
+import core.DTNHost;
 import routing.util.TupleDe;
 import java.util.*;
 
 public class NAKTBuilder extends KeyManager {
     private final int lcnum;
-    private final Map<String, TupleDe<String, String>> encryptedKeyMap;
-    private final Map<String, List<TupleDe<String, String>>> subscriberKeyMap;
+    private final Map<DTNHost, TupleDe<String, String>> encryptedKeyMap;
+    private final Map<DTNHost, List<TupleDe<String, String>>> subscriberKeyMap;
 
     /**
      * Constructor for NAKTBuilder.
@@ -30,25 +31,25 @@ public class NAKTBuilder extends KeyManager {
      * @param existingAttributes  List of numeric attributes used for key derivation.
      * @return true if the NAKT key structure is successfully built, false otherwise.
      */
-    public boolean buildNAKT(Map<TupleDe<String, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, String>>> subscriberTopicMap,
+    public boolean buildNAKT(Map<TupleDe<DTNHost, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, DTNHost>>> subscriberTopicMap,
                              List<TupleDe<Integer, Integer>> existingAttributes) {
         if (subscriberTopicMap == null || subscriberTopicMap.isEmpty() || existingAttributes == null || existingAttributes.isEmpty()) {
+            System.out.println("subscriberTopicMap is null or empty "+ subscriberTopicMap);
             return false;
         }
 
-        for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, String>>> entry : subscriberTopicMap.entrySet()) {
-            TupleDe<String, List<Boolean>> subscriberInfo = entry.getKey();
-            List<TupleDe<TupleDe<Boolean, Integer>, String>> publisherInfo = entry.getValue();
+        for (Map.Entry<TupleDe<DTNHost, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, DTNHost>>> entry : subscriberTopicMap.entrySet()) {
+            TupleDe<DTNHost, List<Boolean>> subscriberInfo = entry.getKey();
+            List<TupleDe<TupleDe<Boolean, Integer>, DTNHost>> publisherInfo = entry.getValue();
 
             if (publisherInfo == null || publisherInfo.isEmpty()) continue;
 
-            TupleDe<TupleDe<Boolean, Integer>, String> firstEntry = publisherInfo.get(0);
+            TupleDe<TupleDe<Boolean, Integer>, DTNHost> firstEntry = publisherInfo.get(0);
             TupleDe<Boolean, Integer> innerTuple = firstEntry.getFirst();
             int num = innerTuple.getSecond();
-            String publisherID = firstEntry.getSecond();
 
             // 🔹 **Generate Publisher Key**
-            if (!encryptedKeyMap.containsKey(publisherID)) {
+            if (!encryptedKeyMap.containsKey(firstEntry.getSecond())) {
                 String rootKey = generateRootKey(num);
                 List<TupleDe<String, String>> keyList = new ArrayList<>();
                 encryptTreeNodes(0, getNearestPowerOfTwo(num) - 1, rootKey, "", 1, keyList);
@@ -60,7 +61,7 @@ public class NAKTBuilder extends KeyManager {
                         .orElse(null);
 
                 if (selectedKey != null) {
-                    encryptedKeyMap.put(publisherID, selectedKey);
+                    encryptedKeyMap.put(firstEntry.getSecond(), selectedKey);
                 }
             }
 
@@ -153,6 +154,13 @@ public class NAKTBuilder extends KeyManager {
         if (leftPath.length() == lcnum) keyList.add(new TupleDe<>(leftPath, leftKey));
         if (rightPath.length() == lcnum) keyList.add(new TupleDe<>(rightPath, rightKey));
 
+
+
+// 🔹 **Logging Debugging**
+        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
+        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
+        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);
+
         // 🔹 **Recursive call to generate deeper key nodes**
         encryptTreeNodes(min, mid, leftKey, leftPath, depth + 1, keyList);
         encryptTreeNodes(mid + 1, max, rightKey, rightPath, depth + 1, keyList);
@@ -163,7 +171,7 @@ public class NAKTBuilder extends KeyManager {
      *
      * @return A map containing publisher IDs and their encryption keys.
      */
-    public Map<String, TupleDe<String, String>> getKeysForPublisher() {
+    public Map<DTNHost, TupleDe<String, String>> getKeysForPublisher() {
         return this.encryptedKeyMap;
     }
 
@@ -172,7 +180,7 @@ public class NAKTBuilder extends KeyManager {
      *
      * @return A map containing subscriber IDs and their list of authentication keys.
      */
-    public Map<String, List<TupleDe<String, String>>> getKeysForSubscriber() {
+    public Map<DTNHost, List<TupleDe<String, String>>> getKeysForSubscriber() {
         return this.subscriberKeyMap;
     }
 
@@ -191,9 +199,3 @@ public class NAKTBuilder extends KeyManager {
     }
 }
 
-
-
-// 🔹 **Logging Debugging**
-//        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
-//        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
-//        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);

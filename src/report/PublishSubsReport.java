@@ -145,7 +145,6 @@ public class PublishSubsReport extends Report implements MessageListener, Update
         // Tampilkan probabilitas dan overhead
         write("\n=== Delivery Metrics ===");
         write("Delivery Probability: " + format(deliveryProb));
-        write("Response Success Probability: " + format(responseProb));
         write("Overhead Ratio: " + format(overHead));
 
         // Footer untuk laporan

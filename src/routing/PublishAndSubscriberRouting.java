@@ -6,11 +6,9 @@
  */
 package routing;
 
-import KDC.Publisher.BrokerRegistrationHandler;
+import KDC.NAKT.NAKTBuilder;
 import KDC.Publisher.EncryptionUtil;
-import KDC.Publisher.KDCRegistrationProcessor;
-import KDC.Subscriber.BrokerHandler;
-import KDC.Subscriber.SubscriptionManager;
+import KDC.Subscriber.KeySubscriber;
 import core.*;
 import routing.util.TupleDe;
 
@@ -21,33 +19,30 @@ import java.util.*;
  * for Delay-Tolerant Networks (DTNs). It manages secure encryption, subscriber authentication,
  * and message forwarding using Numeric Attribute Key Trees (NAKT).
  */
-public class PublishAndSubscriberRouting extends CCDTN {
-    // Maps for managing topics, subscriptions, encryption, and authentication keys
-    public static Map<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscribedTopics; // key for the topic and id of subscriber, value is for list of numeric atribute
-    public static Map<Integer, List<TupleDe<Boolean, String>>> registeredTopics;
-    public static Map<String, TupleDe<String, String>> keyEncryption;
-    public static Map<String, List<TupleDe<String, String>>> keyAuthentication;
+public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber {
+    // Namespace settings
+    private static final String PUBSROUTING_NS = "PublishAndSubscriberRouting";
+    protected static final String LCNUM = "LCNUM";
+
+    // Static maps for managing topics, subscriptions, encryption, and authentication keys
+    public static Map<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> subscribedTopics;
+    // Key: topic & subscriber ID, Value: list of numeric attributes
+    public static Map<DTNHost, List<TupleDe<Boolean, Integer>>> registeredTopics;
+    public static Map<DTNHost, TupleDe<String, String>> keyEncryption;
+    public static Map<DTNHost, List<TupleDe<String, String>>> keyAuthentication;
+    private Map<DTNHost, List<TupleDe<List<Boolean>, List<Integer>>>> tempTopicsM; //for temp regis
+    // 🔹 Temporary storage for subscribers' interests
+    private Map<DTNHost, List<TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>>>> tempSubscribersM;
+
+    // Static integer for local counter number
     public static int lcnum;
 
-    private boolean topicVall;
-    private int subTopicVall;
-
-    // for report
+    // Counters for reporting message and data statistics
     private int msgReceived = 0;
     private int msgTransferred = 0;
     private int dataReceived = 0;
     private int dataTransferred = 0;
 
-    // Handlers for registration and subscription management
-    private KDCRegistrationProcessor processor;
-    private BrokerHandler brokerHandler;
-
-
-    /**
-     * namespace settings ({@value})
-     */
-    private static final String PUBSROUTING_NS = "PublishAndSubscriberRouting";
-    protected static final String LCNUM = "LCNUM";
 
     /**
      * Constructor: Initializes PublishAndSubscriberRouting with settings, topic registration,
@@ -60,54 +55,16 @@ public class PublishAndSubscriberRouting extends CCDTN {
         super(s);
         Settings ccSettings = new Settings(PUBSROUTING_NS);
         lcnum = ccSettings.getInt(LCNUM);
-        initNAKT();
-        // Ensure keyEncryption is initialized
-        if (keyEncryption == null) {
-            keyEncryption = new HashMap<>();
-        } else {
-            keyEncryption = brokerHandler.getKeyEncryption();
-            for (Map.Entry<String, TupleDe<String, String>> entry : keyEncryption.entrySet()) {
-                keyEncryption.put(entry.getKey(), entry.getValue());  // Deep copy to avoid reference issues
-            }
-        }
-
+        this.tempTopicsM = new HashMap<>();
+        this.tempSubscribersM = new HashMap<>();
+        this.keyEncryption = new HashMap<>();
         // Initialize registeredTopics with a deep copy if needed
-        registeredTopics = processor.getRegisteredTopics();
-        if (registeredTopics == null) {
-            registeredTopics = new HashMap<>();
-        } else {
-            for (Map.Entry<Integer, List<TupleDe<Boolean, String>>> entry : registeredTopics.entrySet()) {
-                List<TupleDe<Boolean, String>> list = entry.getValue();
-                registeredTopics.put(entry.getKey(), new ArrayList<>(list));  // Deep copy of the list
-            }
-        }
-
+        this.registeredTopics = new HashMap<>();
         // Handle subscribedTopics with deep copy logic if it's not null
-        if (subscribedTopics == null) {
-            subscribedTopics = new HashMap<>();
-        } else {
-            subscribedTopics = brokerHandler.getSubscribedTopics();
-            for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> entry : subscribedTopics.entrySet()) {
-                // You should add the processing logic here for subscribedTopics if necessary
-                // For example, deep copying the values of subscribedTopics if needed:
-                TupleDe<String, List<Boolean>> key = entry.getKey();
-                List<TupleDe<Integer, Integer>> value = entry.getValue();
-                subscribedTopics.put(key, new ArrayList<>(value));  // Deep copy the list
-            }
-        }
-
+        this.subscribedTopics = new HashMap<>();
         // Initialize keyAuthentication map
-        if (keyAuthentication == null) {
-            keyAuthentication = new HashMap<>();
-        }
+        this.keyAuthentication = new HashMap<>();
 
-        // Ensure deep copy of keyAuthentication from brokerHandler if needed
-        Map<String, List<TupleDe<String, String>>> tempKeyAuth = brokerHandler.getKeyAuthentication();
-        if (tempKeyAuth != null) {
-            for (Map.Entry<String, List<TupleDe<String, String>>> entry : tempKeyAuth.entrySet()) { // Deep copy the list
-                keyAuthentication.put(entry.getKey(), entry.getValue());
-            }
-        }
     }
 
     /**
@@ -119,60 +76,16 @@ public class PublishAndSubscriberRouting extends CCDTN {
         // Call the superclass copy constructor
         super(r);
         lcnum = r.lcnum;
-        initNAKT();
-
+        tempTopicsM = r.tempTopicsM;
+        tempSubscribersM = r.tempSubscribersM;
         // Handle keyEncryption copy similarly
-        if (r.keyEncryption == null) {
-            keyEncryption = new HashMap<>();
-        } else {
-            keyEncryption = new HashMap<>(r.keyEncryption);
-            for (Map.Entry<String, TupleDe<String, String>> entry : keyEncryption.entrySet()) {
-                keyEncryption.put(entry.getKey(), entry.getValue());  // Deep copy values
-            }
-        }
-
+        keyEncryption = new HashMap<>(r.keyEncryption);
         // Initialize registeredTopics as a new HashMap if it is null in the original object
-        if (r.registeredTopics == null) {
-            registeredTopics = new HashMap<>();
-        } else {
-            registeredTopics = new HashMap<>(r.registeredTopics);
-            // Deep copy each list inside registeredTopics
-            for (Map.Entry<Integer, List<TupleDe<Boolean, String>>> entry : r.registeredTopics.entrySet()) {
-                List<TupleDe<Boolean, String>> valueCopy = new ArrayList<>(entry.getValue());
-                registeredTopics.put(entry.getKey(), valueCopy);
-            }
-        }
-
+        registeredTopics = new HashMap<>(r.registeredTopics);
         // Handle subscribedTopics copying
-        if (r.subscribedTopics == null) {
-            subscribedTopics = new HashMap<>();
-        } else {
-            subscribedTopics = new HashMap<>(r.subscribedTopics);
-            // Deep copy the values for subscribedTopics
-            for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> entry : r.subscribedTopics.entrySet()) {
-                List<TupleDe<Integer, Integer>> valueCopy = new ArrayList<>(entry.getValue());
-                subscribedTopics.put(entry.getKey(), valueCopy);
-            }
-        }
-
+        subscribedTopics = new HashMap<>(r.subscribedTopics);
         // Initialize keyAuthentication map
-        if (r.keyAuthentication == null) {
-            keyAuthentication = new HashMap<>();
-        } else {
-            keyAuthentication = new HashMap<>();
-            // Deep copy of keyAuthentication
-            for (Map.Entry<String, List<TupleDe<String, String>>> entry : r.keyAuthentication.entrySet()) {
-                keyAuthentication.put(entry.getKey(), entry.getValue());
-            }
-        }
-    }
-
-    /**
-     * Initializes the Numeric Attribute Key Tree (NAKT) processors.
-     */
-    private void initNAKT() {
-        this.processor = new KDCRegistrationProcessor();
-        this.brokerHandler = new BrokerHandler();
+        keyAuthentication = new HashMap<>(r.keyAuthentication);
     }
 
     /**
@@ -187,15 +100,300 @@ public class PublishAndSubscriberRouting extends CCDTN {
         super.changedConnection(con);
         DTNHost host = getHost();
         DTNHost otherNode = con.getOtherNode(host);
-        topicVall = otherNode.getTopicValue();
-        subTopicVall = otherNode.getSubTopic();
+
+        // 🔹 Panggil metode untuk generate topic dan sub-topic untuk publisher
+        List<Boolean> localTopicVall = host.getTopicValue();
+        List<Integer> localSubTopicVall = host.getSubTopic();
+
         if (con.isUp()) {
-            // Connection is up
-            // for pubs
-            BrokerRegistrationHandler brokerHandler = new BrokerRegistrationHandler(host);
-            brokerHandler.sendToBrokerForRegistration(topicVall, subTopicVall);
-            SubscriptionManager subscriptionManager = new SubscriptionManager(otherNode);
-            subscriptionManager.interestCheck(otherNode);
+            processLocalSubTopic(otherNode, host, localTopicVall, localSubTopicVall);
+            interestCheck(otherNode);
+        } else {
+            processRegisteredTopics(otherNode);
+            processSubscribedTopics(otherNode);
+        }
+    }
+
+
+    private void processLocalSubTopic(DTNHost otherNode, DTNHost host, List<Boolean> localTopicVall, List<Integer> localSubTopicVall) {
+        PublishAndSubscriberRouting othRouter = (PublishAndSubscriberRouting) otherNode.getRouter();
+
+        // Initialize empty list
+        List<TupleDe<List<Boolean>, List<Integer>>> listGetVal = new ArrayList<>();
+
+        // Only allow publishers to have actual topics and subtopics
+        if (host.isPublisher() && !localSubTopicVall.isEmpty()) {
+            TupleDe<List<Boolean>, List<Integer>> getval = new TupleDe<>(localTopicVall, localSubTopicVall);
+            listGetVal.add(getval);
+        }
+
+        // Store in tempTopicsM for both nodes
+        this.tempTopicsM.put(otherNode, listGetVal);
+        othRouter.tempTopicsM.put(host, listGetVal);
+    }
+
+    private void processRegisteredTopics(DTNHost otherNode) {
+        // Ensure only publishers can register topics
+        if (!otherNode.isPublisher()) {
+            return;
+        }
+
+        // Ensure this node has previously exchanged data
+        if (!tempTopicsM.containsKey(otherNode)) {
+            return;
+        }
+
+        // 🔹 Find the KDC host
+        DTNHost kdcHost = null;
+        for (DTNHost host : SimScenario.getInstance().getHosts()) {
+            if (host.isKDC()) {
+                kdcHost = host;
+                break; // Stop once KDC is found
+            }
+        }
+
+        // Ensure that a KDC exists before registering
+        if (kdcHost == null) {
+            return;
+        }
+
+        List<TupleDe<List<Boolean>, List<Integer>>> tempTopics = tempTopicsM.get(otherNode);
+        if (tempTopics == null || tempTopics.isEmpty()) {
+            return;
+        }
+
+        // Initialize registeredTopics entry if not present
+        if (!registeredTopics.containsKey(otherNode)) {
+            registeredTopics.put(otherNode, new ArrayList<>());
+        }
+
+        List<TupleDe<Boolean, Integer>> registeredList = registeredTopics.get(otherNode);
+        Set<TupleDe<Boolean, Integer>> existingEntries = new HashSet<>(registeredList);
+
+        // Process topics while avoiding duplicates
+        List<TupleDe<Boolean, Integer>> tempRegistered = new ArrayList<>();
+
+        for (TupleDe<List<Boolean>, List<Integer>> tuple : tempTopics) {
+            for (int i = 0; i < Math.min(tuple.getFirst().size(), tuple.getSecond().size()); i++) {
+                TupleDe<Boolean, Integer> newEntry = new TupleDe<>(tuple.getFirst().get(i), tuple.getSecond().get(i));
+
+                if (!existingEntries.contains(newEntry)) {
+                    // 🔹 Try to add the registered topic to KDC buffer
+                    if (!addToBufferForKDC(kdcHost, newEntry)) {
+                        System.out.println("❌ Buffer addition failed, canceling registration for: " + otherNode);
+
+                        // Rollback: Remove previously registered entries
+                        registeredList.removeAll(tempRegistered);
+                        return;
+                    }
+
+                    registeredList.add(newEntry);
+                    existingEntries.add(newEntry);
+                    tempRegistered.add(newEntry);
+                }
+            }
+        }
+
+//        System.out.println("✅ Topics registered for publisher: " + otherNode);
+
+        // Clear tempTopicsM after processing
+        tempTopicsM.clear();
+//        System.out.println("📌 registeredTopics size: " + registeredTopics.size());
+    }
+
+    /**
+     * Checks and processes the interest of the subscriber.
+     * It verifies the subscriber's interest attributes and temporarily stores them in tempSubscribersM.
+     *
+     * @param host The DTNHost object representing the subscriber.
+     */
+    private void interestCheck(DTNHost host) {
+        // Get subscriber's interest attributes
+        List<Double> socialProfile = host.getSocialProfile();
+        List<Boolean> socialProfileOI = host.getSocialProfileOI();
+        List<TupleDe<Integer, Integer>> numericAtribute = host.getNumericAtribute();
+
+        if (socialProfile == null || socialProfileOI == null || numericAtribute == null) {
+            System.err.println("Error: Missing subscriber attributes.");
+            return;
+        }
+
+        // 🔹 Store the subscriber's interest using TupleDe (no Object type)
+        TupleDe<List<Double>, List<Boolean>> profileData = new TupleDe<>(socialProfile, socialProfileOI);
+        TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>> subscriberData =
+                new TupleDe<>(profileData, numericAtribute);
+
+        // 🔹 Store in temporary map
+        List<TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>>> listGetVal = new ArrayList<>();
+        listGetVal.add(subscriberData);
+        tempSubscribersM.put(host, listGetVal);
+    }
+
+    public void processSubscribedTopics(DTNHost otherNode) {
+        // Ensure only Subscribers can Subscribe
+        if (!otherNode.isSubscriber()) {
+            return;
+        }
+
+        // Ensure this node has previously exchanged data
+        List<TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>>> tempDataList = tempSubscribersM.get(otherNode);
+        if (tempDataList == null || tempDataList.isEmpty()) {
+            return;
+        }
+
+        // 🔹 Find the KDC host
+        DTNHost kdcHost = null;
+        for (DTNHost host : SimScenario.getInstance().getHosts()) {
+            if (host.isKDC()) {
+                kdcHost = host;
+                break;
+            }
+        }
+
+        // Ensure that a KDC exists before subscribing
+        if (kdcHost == null) {
+            return;
+        }
+
+        // Ensure `subscribedTopics` entry exists
+        if (!subscribedTopics.containsKey(otherNode)) {
+            subscribedTopics.put(otherNode, new TupleDe<>(new LinkedList<>(), new LinkedList<>()));
+        }
+        TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> subscribedList = subscribedTopics.get(otherNode);
+
+        // Store existing entries to avoid duplicates
+        Set<TupleDe<Boolean, TupleDe<Integer, Integer>>> existingEntries = new HashSet<>();
+
+        // Get registered topics to check for matches
+        Map<DTNHost, List<TupleDe<Boolean, Integer>>> topics = registeredTopics;
+
+        // 🔹 **Inisialisasi subscriberTopicMap & existingAttributes agar tidak null**
+        Map<TupleDe<DTNHost, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, DTNHost>>> subscriberTopicMap = new HashMap<>();
+        List<TupleDe<Integer, Integer>> existingAttributes = new ArrayList<>();
+
+        // 🔹 Batasi jumlah langganan untuk mencegah alokasi berlebihan
+        int maxSubscriptions = 10;
+        int subscriptionCount = 0;
+        boolean allSubscriptionsSuccessful = true;
+
+        Iterator<TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>>> tempIterator = tempDataList.iterator();
+        while (tempIterator.hasNext()) {
+            TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>> tempData = tempIterator.next();
+            List<Boolean> socialProfileOI = tempData.getFirst().getSecond();
+            List<TupleDe<Integer, Integer>> topicAttributes = tempData.getSecond();
+
+            if (topicAttributes.isEmpty() || socialProfileOI.isEmpty()) {
+                continue; // Hindari pemrosesan jika data tidak lengkap
+            }
+
+            Iterator<TupleDe<Integer, Integer>> subTopicIterator = topicAttributes.iterator();
+            while (subTopicIterator.hasNext()) {
+                if (subscriptionCount >= maxSubscriptions) {
+                    break;
+                }
+
+                TupleDe<Integer, Integer> subTopicEntry = subTopicIterator.next();
+                boolean topicExists = false;
+
+                for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : topics.entrySet()) {
+                    DTNHost publisherHost = entry.getKey();
+                    List<TupleDe<Boolean, Integer>> registeredValues = entry.getValue();
+
+                    for (TupleDe<Boolean, Integer> registeredValue : registeredValues) {
+                        Boolean topicBoolean = registeredValue.getFirst();
+                        Integer registeredSubTopic = registeredValue.getSecond();
+
+                        // ✅ **Cek apakah subscriber memiliki topik yang sama dengan publisher**
+                        if (socialProfileOI.contains(topicBoolean) &&
+                                registeredSubTopic >= subTopicEntry.getFirst() &&
+                                registeredSubTopic <= subTopicEntry.getSecond()) {
+
+                            topicExists = true;
+                            TupleDe<Boolean, TupleDe<Integer, Integer>> newEntry = new TupleDe<>(topicBoolean, subTopicEntry);
+
+                            if (!existingEntries.contains(newEntry)) {
+                                subscribedList.getFirst().add(topicBoolean);
+                                subscribedList.getSecond().add(subTopicEntry);
+                                existingEntries.add(newEntry);
+                                subscriptionCount++;
+
+                                System.out.println("✅ Successfully subscribed to topic: " + topicBoolean + " | Sub-Topic: " + subTopicEntry);
+
+                                // 🔹 **Tambahkan ke subscriberTopicMap**
+                                TupleDe<TupleDe<Boolean, Integer>, DTNHost> publisherInfo =
+                                        new TupleDe<>(new TupleDe<>(topicBoolean, registeredSubTopic), publisherHost);
+
+                                TupleDe<DTNHost, List<Boolean>> subscriberInfo =
+                                        new TupleDe<>(otherNode, socialProfileOI);
+
+                                // Pastikan subscriberInfo ada dalam subscriberTopicMap
+                                subscriberTopicMap.computeIfAbsent(subscriberInfo, k -> new ArrayList<>())
+                                        .add(publisherInfo);
+
+                                // 🔹 **Tambahkan existingAttributes**
+                                existingAttributes.add(subTopicEntry);
+
+                                // 🔹 **Tambahkan ke buffer KDC**
+                                boolean addedToBuffer = addToBufferForKDCToSubscribe(kdcHost, newEntry, otherNode);
+                                if (!addedToBuffer) {
+                                    System.out.println("❌ Subscription failed: Unable to add message to KDC buffer.");
+                                    allSubscriptionsSuccessful = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (topicExists) break;
+                }
+
+                subTopicIterator.remove();
+            }
+
+            tempIterator.remove();
+        }
+
+        // **Jika tidak ada subscription yang berhasil, rollback semuanya**
+        if (!allSubscriptionsSuccessful || subscriberTopicMap.isEmpty()) {
+            System.out.println("❌ Rolling back subscriptions for: " + otherNode);
+            subscribedTopics.remove(otherNode);
+            return;
+        }
+
+        // Bersihkan tempSubscribersM untuk subscriber ini setelah selesai
+        tempSubscribersM.remove(otherNode);
+
+        // 🔹 **Cek subscriberTopicMap sebelum membangun NAKT**
+        if (subscriberTopicMap.isEmpty()) {
+            System.out.println("⚠️ subscriberTopicMap is empty, skipping NAKT generation.");
+            return;
+        }
+
+        // ✅ **Build NAKT dengan subscriberTopicMap dan existingAttributes**
+        System.out.println("✅ Building NAKT...");
+        NAKTBuilder nakt = new NAKTBuilder(lcnum);
+        if (nakt.buildNAKT(subscriberTopicMap, existingAttributes)) {
+            System.out.println("✅ NAKT successfully built.");
+
+            Map<DTNHost, TupleDe<String, String>> publisherKeys = nakt.getKeysForPublisher();
+            Map<DTNHost, List<TupleDe<String, String>>> subscriberKeys = nakt.getKeysForSubscriber();
+
+            if (publisherKeys != null && !publisherKeys.isEmpty()) {
+                for (Map.Entry<DTNHost, TupleDe<String, String>> entryKey : publisherKeys.entrySet()) {
+                    if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
+                        keyEncryption.put(entryKey.getKey(), entryKey.getValue());
+                    }
+                }
+            }
+
+            if (subscriberKeys != null && !subscriberKeys.isEmpty()) {
+                for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entryKey : subscriberKeys.entrySet()) {
+                    if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
+                        keyAuthentication.put(entryKey.getKey(), entryKey.getValue());
+                    }
+                }
+            }
+        } else {
+            System.out.println("❌ Failed to build NAKT.");
         }
     }
 
@@ -211,88 +409,91 @@ public class PublishAndSubscriberRouting extends CCDTN {
     public boolean createNewMessage(Message msg) {
         List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
 
-        if (keyEncryption.isEmpty() || allHosts == null) {
+        // **Pastikan ada host, enkripsi, dan registeredTopics**
+        if (allHosts == null || allHosts.isEmpty() || keyEncryption.isEmpty() || registeredTopics.isEmpty()) {
+            System.out.println("❌ No hosts, encryption keys, or registered topics available.");
             return false;
         }
 
-        // Ambil ID host saat ini
-        String hostId = String.valueOf(getHost().getRouter().getHost());
+        DTNHost hostId = getHost();  // **Ambil ID host saat ini**
 
-        // Cek apakah host saat ini terdaftar dalam registeredTopics menggunakan Map.Entry
-        boolean isRegistered = false;
-
-        Map<Integer, List<TupleDe<Boolean, String>>> registered = registeredTopics;
-        if (registered == null || registered.isEmpty()) {
+        // **Langsung cek apakah host memiliki registeredTopics**
+        List<TupleDe<Boolean, Integer>> registeredList = registeredTopics.get(hostId);
+        if (registeredList == null || registeredList.isEmpty()) {
+            System.out.println("⚠️ No registered topics for host: " + hostId);
             return false;
         }
 
-        // Iterasi melalui registeredTopics untuk memeriksa pendaftaran host
-        for (Map.Entry<Integer, List<TupleDe<Boolean, String>>> entry : registered.entrySet()) {
-            List<TupleDe<Boolean, String>> valueList = entry.getValue();
-//            System.out.println("get");
-            for (TupleDe<Boolean, String> tuple : valueList) {
-                if (tuple.getSecond().equals(hostId)) {
-                    isRegistered = true; // Host terdaftar sebagai registered
-                    break;
+        boolean messageCreated = false;
+        Set<TupleDe<Boolean, Integer>> sentMessages = new HashSet<>(); // 🔹 **Set untuk melacak pesan yang sudah dikirim**
+
+        // **Iterasi melalui semua host**
+        for (DTNHost host : allHosts) {
+            TupleDe<String, String> keys = keyEncryption.get(host);
+
+            if (keys == null || keys.getSecond() == null || keys.getSecond().isEmpty()) {
+                continue;  // **Lewati host yang tidak memiliki kunci enkripsi**
+            }
+
+            for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : registeredTopics.entrySet()) {
+                List<TupleDe<Boolean, Integer>> topicList = entry.getValue();
+
+                if (topicList == null || topicList.isEmpty()) {
+                    continue;
+                }
+
+                for (TupleDe<Boolean, Integer> getVal : topicList) {
+                    // **Pastikan nilai valid**
+                    if (getVal == null || getVal.getFirst() == null || getVal.getSecond() == null) {
+                        continue;
+                    }
+
+                    // **Cek apakah pesan ini sudah pernah dikirim oleh host ini**
+                    if (sentMessages.contains(getVal)) {
+                        System.out.println("⚠️ Duplicate message detected, skipping: " + getVal);
+                        continue;
+                    }
+
+                    // **Proses Enkripsi**
+                    String randomMessage = "abcdefghijABCDEFGHIJ"; // 20 karakter
+                    String keyEncrypt = keys.getSecond();
+                    String hashedMessage = EncryptionUtil.encryptMessage(randomMessage, keyEncrypt);
+
+                    Map<Boolean, TupleDe<Integer, String>> messageData = new HashMap<>();
+                    TupleDe<Integer, String> value = new TupleDe<>(getVal.getSecond(), hashedMessage);
+                    messageData.put(getVal.getFirst(), value);
+
+                    // **Debugging**
+                    System.out.println("🔹 Creating message...");
+                    System.out.println("   - Plain Text: " + randomMessage);
+                    System.out.println("   - Encryption Key: " + keyEncrypt);
+                    System.out.println("   - Encrypted Text: " + hashedMessage);
+
+                    // **Pastikan ada ruang sebelum menambahkan pesan**
+                    if (!makeRoomForMessage(msg.getSize())) {
+                        System.out.println("❌ Not enough space in buffer for message.");
+                        return false;
+                    }
+
+                    // **Tambahkan pesan ke buffer**
+                    msg.setTtl(this.msgTtl);
+                    msg.addProperty(MESSAGE_TOPICS_S, messageData);
+                    addToMessages(msg, true);
+                    messageCreated = true;
+
+                    // 🔹 **Tambahkan ke Set agar tidak dikirim dua kali**
+                    sentMessages.add(getVal);
+
+                    System.out.println("✅ Success create message with encryption: " + msg.getProperty(MESSAGE_TOPICS_S));
                 }
             }
-            if (isRegistered) {
-                break; // Keluar dari loop jika sudah terdaftar
-            }
         }
 
-        if (!isRegistered) {
-            return false; // Jika tidak terdaftar, hentikan proses
-        }
-
-        // Proses untuk membuat pesan baru
-        for (DTNHost host : allHosts) {
-            String getHostId = String.valueOf(host.getRouter().getHost());
-
-            // Cari host yang sesuai dengan getHostId
-            if (!keyEncryption.containsKey(getHostId)) {
-                continue;  // Lewati jika tidak cocok
-            }
-
-            TupleDe<String, String> keys = keyEncryption.get(getHostId);
-
-            if (keys == null || keys.isEmpty()) {  // Pastikan list tidak kosong
-                continue;
-            }
-
-            // Ambil topic dan subTopic dari host yang cocok
-            if (getHostId.equals(hostId)) {
-                topicVall = host.getTopicValue();
-                subTopicVall = host.getSubTopic();
-            }
-
-            if (subTopicVall <= 0) {
-                return false;
-            }
-
-//            String randomMessage = EncryptionUtil.generateRandomString(20); // 20 karakter
-            String randomMessage = "abcdefghijABCDEFGHIJ"; // 20 karakter
-            String keyEncrypt = keys.getSecond(); // Gunakan key dari Tuple
-            String getBinaryPath = keys.getFirst();
-
-            String hashedMessage = EncryptionUtil.encryptMessage(randomMessage, keyEncrypt);
-
-            Map<Boolean, TupleDe<Integer, String>> messageData = new HashMap<>();
-            TupleDe<Integer, String> value = new TupleDe<>(subTopicVall, hashedMessage);
-            messageData.put(topicVall, value);
-            System.out.println("get msg before encrytion: " + randomMessage);
-            System.out.println("get key encryption: " + keyEncrypt);
-            System.out.println("get msg after encrytion: " + hashedMessage);
-            // **5. Tambahkan ke properti message**
-            makeRoomForMessage(msg.getSize());
-            msg.setTtl(this.msgTtl);
-            msg.addProperty(MESSAGE_TOPICS_S, messageData);
-            addToMessages(msg, true);
-            System.out.println("success create msg with encrypt" + msg.getProperty(MESSAGE_TOPICS_S));
-            return super.createNewMessage(msg);
-        }
-        return false;
+        // **Kirim pesan hanya jika berhasil dibuat**
+        return messageCreated && super.createNewMessage(msg);
     }
+
+
 
 
     /**
@@ -325,16 +526,11 @@ public class PublishAndSubscriberRouting extends CCDTN {
             }
         }
         // Cek apakah host subscriber sudah terdaftar dalam subscribedTopics
-        String hostId = String.valueOf(getHost().getRouter().getHost());
         boolean isSubscribed = false;
 
         // Loop melalui subscribedTopics untuk mencocokkan hostId
-        for (Map.Entry<TupleDe<String, List<Boolean>>, List<TupleDe<Integer, Integer>>> entry : subscribedTopics.entrySet()) {
-            TupleDe<String, List<Boolean>> key = entry.getKey();
-            if (key.getFirst().equals(hostId)) {
-                isSubscribed = true; // Host terdaftar sebagai subscriber
-                break;
-            }
+        if (subscribedTopics.containsKey(getHost())) {
+            isSubscribed = true;
         }
 
         if (!isSubscribed) {
@@ -430,6 +626,7 @@ public class PublishAndSubscriberRouting extends CCDTN {
 
         // Try other messages for transfer
         tryOtherMessages();
+
     }
 
     /**
@@ -468,7 +665,9 @@ public class PublishAndSubscriberRouting extends CCDTN {
         // Iterate through all connections
         for (Connection con : connections) {
             DTNHost other = con.getOtherNode(host);
-            if (other == null) {
+            CCDTN othRouter = (CCDTN) other.getRouter();
+
+            if (othRouter.isTransferring()) {
                 continue;
             }
 
@@ -478,6 +677,10 @@ public class PublishAndSubscriberRouting extends CCDTN {
                 for (Message msg : msgCollection) {
                     if (msg == null) {
                         continue;
+                    }
+
+                    if (othRouter.hasMessage(msg.getId())) {
+                        continue; // skip messages that the other one has
                     }
                     if (isSameInterest(msg, other)) {
                         tempMessages.add(new Tuple<>(msg, con));
@@ -536,6 +739,24 @@ public class PublishAndSubscriberRouting extends CCDTN {
     public int getMsgTransferred() {
         return this.msgTransferred;
     }
+
+    public Map<DTNHost, Integer> getKeys() {
+        Map<DTNHost, Integer> keys = new HashMap<>();
+
+        if (keyAuthentication == null) {
+            return Collections.emptyMap(); // ✅ Return an empty map instead of null
+        }
+
+        for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : keyAuthentication.entrySet()) {
+            if (entry.getValue() != null) { // ✅ Prevents NullPointerException
+                int keyCount = entry.getValue().size();
+                keys.put(entry.getKey(), keyCount);
+            }
+        }
+
+        return keys;
+    }
+
 
     /**
      * Creates a duplicate of the current router instance.

@@ -368,5 +368,7 @@ public class Message implements Comparable<Message> {
 	public void setAppID(String appID) {
 		this.appID = appID;
 	}
-	
+
+
+
 }

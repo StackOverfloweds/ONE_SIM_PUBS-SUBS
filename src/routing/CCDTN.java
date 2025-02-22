@@ -13,6 +13,7 @@ import KDC.Subscriber.DecryptUtil;
 import core.*;
 
 import java.util.*;
+
 import routing.community.Duration;
 import routing.util.TupleDe;
 
@@ -86,15 +87,15 @@ public class CCDTN extends ActiveRouter {
      * @param keyAuth The map containing authentication keys for subscribers
      * @return True if the message is at its final destination, false otherwise
      */
-    protected boolean isFinalDest(Message m, DTNHost host, Map<String, List<TupleDe<String, String>>> keyAuth) {
+    protected boolean isFinalDest(Message m, DTNHost host, Map<DTNHost, List<TupleDe<String, String>>> keyAuth) {
         Map<Boolean, TupleDe<Integer, String>> finalDestMap = getTopicMap(m);
 
         if (finalDestMap == null || finalDestMap.isEmpty()) {
             return false;
         }
 
-        List<Boolean> hostTopicNode = host.getOwnInterest();
-        List<Double> hostWeightNode = host.getInterest();
+        List<Boolean> hostTopicNode = host.getSocialProfileOI();
+        List<Double> hostWeightNode = host.getSocialProfile();
 
         if (hostTopicNode == null || hostWeightNode == null || hostTopicNode.isEmpty() || hostWeightNode.isEmpty()) {
             return false;
@@ -115,14 +116,17 @@ public class CCDTN extends ActiveRouter {
     /**
      * Authenticates a subscriber by attempting to decrypt the received message using available keys.
      *
-     * @param from    The DTNHost requesting authentication
+     * @param from      The DTNHost requesting authentication
      * @param topicName The encrypted message
-     * @param keyAuth The map containing keys for decryption
+     * @param keyAuth   The map containing keys for decryption
      * @return True if decryption is successful, false otherwise
      */
-    protected boolean authenticateSubscriber(DTNHost from, String topicName, Map<String, List<TupleDe<String, String>>> keyAuth) {
-        for (Map.Entry<String, List<TupleDe<String, String>>> entry : keyAuth.entrySet()) {
-            String subscriberId = entry.getKey();
+    protected boolean authenticateSubscriber(DTNHost from, String topicName, Map<DTNHost, List<TupleDe<String, String>>> keyAuth) {
+        // Map lokal untuk melacak pesan yang sudah diterima dalam metode ini saja
+        Map<DTNHost, Set<String>> receivedMessages = new HashMap<>();
+
+        for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : keyAuth.entrySet()) {
+            DTNHost subscriberId = entry.getKey();
             List<TupleDe<String, String>> keyList = entry.getValue();
 
             if (keyList == null || keyList.isEmpty()) {
@@ -130,16 +134,28 @@ public class CCDTN extends ActiveRouter {
             }
 
             for (DTNHost getSub : SimScenario.getInstance().getHosts()) {
-                String hostId = String.valueOf(getSub.getRouter().getHost());
+                if (getSub.getRouter() instanceof CCDTN) {
+                    if (connHistory.containsKey(subscriberId)) {
+                        TupleDe<String, String> decryptedContent = DecryptUtil.decryptMessage(topicName, keyList);
 
-                if (getSub.isSubscriber() && getHost().getRouter() instanceof CCDTN && subscriberId.contains(hostId)) {
-                    TupleDe<String, String> decryptedContent = DecryptUtil.decryptMessage(topicName, keyList);
+                        if (decryptedContent != null && !decryptedContent.getSecond().isEmpty()) {
+                            String decryptedMessage = decryptedContent.getSecond();
 
-                    // ✅ Ensure decryption is successful
-                    if (decryptedContent != null && !decryptedContent.getSecond().isEmpty()) {
-                        System.out.println("✅ Final Decryption Success with Path: " + decryptedContent.getFirst());
-                        System.out.println("🔹 Message: " + decryptedContent.getSecond());
-                        return true;
+                            // Inisialisasi set lokal untuk subscriber jika belum ada
+                            receivedMessages.putIfAbsent(subscriberId, new HashSet<>());
+
+                            // Cek apakah subscriber sudah menerima pesan ini sebelumnya
+                            if (receivedMessages.get(subscriberId).contains(decryptedMessage)) {
+                                System.out.println("⚠️ DUPLICATE WARNING: Subscriber " + subscriberId + " sudah menerima pesan ini sebelumnya!");
+                                continue; // Skip pesan yang duplikat
+                            }
+
+                            // Tambahkan pesan ke daftar yang sudah diterima oleh subscriber ini
+                            receivedMessages.get(subscriberId).add(decryptedMessage);
+
+                            System.out.println("🔹 Message: " + decryptedMessage);
+                            return true;
+                        }
                     }
                 }
             }
@@ -148,6 +164,7 @@ public class CCDTN extends ActiveRouter {
         System.out.println("❌ ERROR: No subscriber successfully decrypted the message!");
         return false;
     }
+
 
     /**
      * Retrieves the topic map from the given message.
@@ -178,7 +195,7 @@ public class CCDTN extends ActiveRouter {
             return false;
         }
 
-        List<Boolean> topicNode = host.getOwnInterest();
+        List<Boolean> topicNode = host.getSocialProfileOI();
         if (topicNode == null) {
             return false;
         }
@@ -206,8 +223,8 @@ public class CCDTN extends ActiveRouter {
             return null;
         }
 
-        List<Boolean> topicNode = host.getOwnInterest();
-        List<Double> weightNode = host.getInterest();
+        List<Boolean> topicNode = host.getSocialProfileOI();
+        List<Double> weightNode = host.getSocialProfile();
 
         if (topicNode == null || weightNode == null || topicNode.size() != weightNode.size()) {
             return null;
@@ -222,6 +239,62 @@ public class CCDTN extends ActiveRouter {
 
         return valInterest;
     }
+
+    protected boolean addToBufferForKDC(DTNHost kdcHost, TupleDe<Boolean, Integer> topicEntry) {
+        if (!kdcHost.isKDC()) {
+            return false;
+        }
+
+        // Generate a new message
+        String msgId = "KDC_REGISTER_" + System.currentTimeMillis();
+        DTNHost sender = getHost(); // The node that registered the topic
+
+        // Calculate message size dynamically from topicEntry
+        int msgSize = topicEntry.getSize();
+
+        // Ensure buffer has enough space before adding
+        if (!makeRoomForMessage(msgSize)) {
+            System.out.println("⚠️ Not enough buffer space for message: " + msgId + " (Size: " + msgSize + " bytes)");
+            return false;
+        }
+
+        // Create a new message with the correct constructor
+        Message newMessage = new Message(sender, kdcHost, msgId, msgSize);
+        newMessage.setTtl(this.msgTtl);
+        newMessage.addProperty("registeredTopic", topicEntry);
+
+        // Add message to buffer using addToMessages()
+        addToMessages(newMessage, true);
+//        System.out.println("✅ Successfully added registration message to KDC buffer: " + msgId);
+        return true;
+    }
+
+    protected boolean addToBufferForKDCToSubscribe(DTNHost kdcHost, TupleDe<Boolean, TupleDe<Integer, Integer>> topicEntry, DTNHost subscriber) {
+        if (!kdcHost.isKDC()) {
+            return false;
+        }
+
+        // Generate a new message
+        String msgId = "KDC_SUBSCRIBE_" + System.currentTimeMillis();
+        DTNHost sender = subscriber; // The subscriber who registered the topic
+
+        // Calculate message size dynamically from topicEntry
+        int msgSize = topicEntry.getSize();
+
+        // Ensure buffer has enough space before adding
+        if (!makeRoomForMessage(msgSize)) {
+            return false;
+        }
+
+        // Create a new message with the correct constructor
+        Message newMessage = new Message(sender, kdcHost, msgId, msgSize);
+        newMessage.setTtl(this.msgTtl);
+        newMessage.addProperty("subscribedTopic", topicEntry);
+        addToMessages(newMessage, true);
+//        System.out.println("✅ Successfully added subscription message to KDC buffer: " + msgId);
+        return true;
+    }
+
 
     /**
      * Updates the router's state and handles message exchanges.
@@ -252,4 +325,7 @@ public class CCDTN extends ActiveRouter {
     public MessageRouter replicate() {
         return new CCDTN(this);
     }
+
+
+
 }

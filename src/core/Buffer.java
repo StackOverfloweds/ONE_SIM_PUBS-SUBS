@@ -1,16 +1,20 @@
-/* 
+/*
  * Copyright 2024 Bryan (HaiPigGi)
  */
 package core;
 
-import core.*;
 import java.util.*;
 
-public class Buffer {
+public class Buffer implements Iterable<Message> {
     /**
      * Message buffer size - setting id {@value}
      */
     public static final String B_SIZE_S = "bufferSize";
+
+    /**
+     * List to store messages
+     */
+    private List<Message> messages;
 
     /**
      * Size of the buffer
@@ -18,13 +22,15 @@ public class Buffer {
     private int bufferSize;
 
     /**
-     * Get the size of the buffer for a specific DTNHost.
-     * 
-     * @param host The DTNHost for which to get the buffer size
-     * @return The size of the buffer for the specified DTNHost
+     * Constructor
      */
+    public Buffer() {
+        this.messages = new ArrayList<>();
+        this.bufferSize = Integer.MAX_VALUE; // Default size
+    }
+
     public int getBufferSize(DTNHost host) {
-         bufferSize = Integer.MAX_VALUE;
+        bufferSize = Integer.MAX_VALUE;
 
         Settings s = new Settings(); // Get settings from the router of the host
 
@@ -35,15 +41,34 @@ public class Buffer {
         return bufferSize;
     }
 
-     /**
+    /**
      * Returns an iterator over the messages in this buffer.
-     * 
+     *
      * @return an iterator over the messages in this buffer
      */
+    @Override
     public Iterator<Message> iterator() {
-        // Assuming messages are stored in a list called 'messages'
-        List<Message> messages = new ArrayList<>(); // Initialize this list with actual messages
         return messages.iterator();
     }
 
+    /**
+     * Adds a message to the buffer.
+     *
+     * @param message The message to add
+     */
+    public void addMessage(Message message) {
+        if (message == null) {
+            throw new IllegalArgumentException("Message cannot be null");
+        }
+        messages.add(message);
+    }
+
+    /**
+     * Removes a message from the buffer.
+     *
+     * @param message The message to remove
+     */
+    public void removeMessage(Message message) {
+        messages.remove(message);
+    }
 }

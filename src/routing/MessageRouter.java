@@ -22,6 +22,7 @@ import core.SettingsError;
 import core.SimClock;
 import core.SimError;
 import core.Tuple;
+import routing.util.TupleDe;
 
 /**
  * Superclass for message routers.
@@ -710,4 +711,5 @@ public abstract class MessageRouter {
                 + this.getHost().toString() + " with " + getNrofMessages()
                 + " messages";
     }
+
 }

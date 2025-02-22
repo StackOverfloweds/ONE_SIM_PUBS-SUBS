@@ -17,6 +17,7 @@ import core.MessageListener;
 import core.Settings;
 import core.SimClock;
 import core.Tuple;
+import routing.util.TupleDe;
 
 /**
  * Superclass of active routers. Contains convenience methods (e.g. 
@@ -101,13 +102,14 @@ public abstract class ActiveRouter extends MessageRouter {
 		}
 		return false;
 	}
-	
-	@Override 
+
+	@Override
 	public boolean createNewMessage(Message m) {
 		makeRoomForNewMessage(m.getSize());
-		return super.createNewMessage(m);	
+		return super.createNewMessage(m);
 	}
-	
+
+
 	@Override
 	public int receiveMessage(Message m, DTNHost from) {
 		int recvCheck = checkReceiving(m); 
@@ -237,7 +239,7 @@ public abstract class ActiveRouter extends MessageRouter {
 		if (size > this.getBufferSize()) {
 			return false; // message too big for the buffer
 		}
-			
+
 		int freeBuffer = this.getFreeBufferSize();
 		/* delete messages from the buffer until there's enough space */
 		while (freeBuffer < size) {
@@ -245,16 +247,16 @@ public abstract class ActiveRouter extends MessageRouter {
 
 			if (m == null) {
 				return false; // couldn't remove any more messages
-			}			
-			
+			}
+
 			/* delete message from the buffer as "drop" */
 			deleteMessage(m.getId(), true);
 			freeBuffer += m.getSize();
 		}
-		
+
 		return true;
 	}
-	
+
 	/**
 	 * Drops messages whose TTL is less than zero.
 	 */
@@ -601,5 +603,12 @@ public abstract class ActiveRouter extends MessageRouter {
 	 * @param con The connection whose transfer was finalized
 	 */
 	protected void transferDone(Connection con) { }
-	
+
+
+
+
+
+
+
+
 }

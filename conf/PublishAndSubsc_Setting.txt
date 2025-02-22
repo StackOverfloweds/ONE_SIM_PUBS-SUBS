@@ -14,7 +14,7 @@ highspeedInterface.transmitSpeed = 10M
 highspeedInterface.transmitRange = 1000
 
 # Define 4 different node groups
-Scenario.nrofHostGroups = 4
+Scenario.nrofHostGroups = 9
 
 Group.nrofHosts = 10
 
@@ -28,7 +28,6 @@ Group.waitTime = 0, 120
 Group.nrofInterfaces = 1
 Group.interface1 = btInterface
 Group.speed = 0.5, 1.5
-Group.msgTtl = 300
 
 # Publisher Group (P) - Source of messages
 Group1.groupID = P
@@ -40,7 +39,7 @@ Group1.interface1 = btInterface
 Group1.nrofInterfaces = 1
 Group1.msgTtl = 300
 Group1.router = PublishAndSubscriberRouting
-Group1.nrofHosts = 10
+Group1.nrofHosts = 15
 
 # Broker Group (B) - Message Forwarding
 Group2.groupID = B
@@ -52,7 +51,7 @@ Group2.interface1 = btInterface
 Group2.nrofInterfaces = 1
 Group2.msgTtl = 300
 Group2.router = PublishAndSubscriberRouting
-Group2.nrofHosts = 6
+Group2.nrofHosts = 12
 
 # Subscriber Group (S) - Message Consumers
 Group3.groupID = S
@@ -64,31 +63,81 @@ Group3.interface1 = btInterface
 Group3.nrofInterfaces = 1
 Group3.msgTtl = 300
 Group3.router = PublishAndSubscriberRouting
-Group3.nrofHosts = 20
+Group3.nrofHosts = 30
 
 # Key Distribution Center (KDC) - Manages Encryption Keys
 Group4.groupID = K
-Group4.movementModel = RandomStatic
-Group4.bufferSize = 20M
-Group4.waitTime = 0, 60
+Group4.movementModel = StationaryMovement
+Group4.nodeLocation = 100,200
+Group4.bufferSize = 10M
 Group4.interface1 = btInterface
 Group4.nrofInterfaces = 1
-Group4.msgTtl = 300
 Group4.router = PublishAndSubscriberRouting
-Group4.nrofHosts = 4
+Group4.nrofHosts = 1
+
+# Key Distribution Center (KDC) - Manages Encryption Keys
+Group5.groupID = K
+Group5.movementModel = StationaryMovement
+Group5.nodeLocation = 120,180
+Group5.bufferSize = 10M
+Group5.interface1 = btInterface
+Group5.nrofInterfaces = 1
+Group5.router = PublishAndSubscriberRouting
+Group5.nrofHosts = 1
+
+# Key Distribution Center (KDC) - Manages Encryption Keys
+Group6.groupID = K
+Group6.movementModel = StationaryMovement
+Group6.nodeLocation = 150,250
+Group6.bufferSize = 10M
+Group6.interface1 = btInterface
+Group6.nrofInterfaces = 1
+Group6.router = PublishAndSubscriberRouting
+Group6.nrofHosts = 1
+
+# Key Distribution Center (KDC) - Manages Encryption Keys
+Group7.groupID = K
+Group7.movementModel = StationaryMovement
+Group7.nodeLocation = 200,300
+Group7.bufferSize = 10M
+Group7.interface1 = btInterface
+Group7.nrofInterfaces = 1
+Group7.router = PublishAndSubscriberRouting
+Group7.nrofHosts = 1
+
+# Key Distribution Center (KDC) - Manages Encryption Keys
+Group8.groupID = K
+Group8.movementModel = StationaryMovement
+Group8.nodeLocation = 250,350
+Group8.bufferSize = 10M
+Group8.interface1 = btInterface
+Group8.nrofInterfaces = 1
+Group8.router = PublishAndSubscriberRouting
+Group8.nrofHosts = 1
+
+# Key Distribution Center (KDC) - Manages Encryption Keys
+Group9.groupID = K
+Group9.movementModel = StationaryMovement
+Group9.nodeLocation = 300,400
+Group9.bufferSize = 10M
+Group9.interface1 = btInterface
+Group9.nrofInterfaces = 1
+Group9.router = PublishAndSubscriberRouting
+Group9.nrofHosts = 1
+
 
 # Message creation parameters
 Events.nrof = 1
 Events1.class = MessageEventGenerator
 Events1.interval = 25,35
 Events1.size = 500k,1M
-Events1.hosts = 0,39
+Events1.hosts = 0,63
 Events1.prefix = M
 
 # Movement model settings
 MovementModel.rngSeed = 1
-MovementModel.worldSize = 300, 300
-MovementModel.warmup = 1000
+MovementModel.worldSize = 300, 400
+MovementModel.warmup = 5000
 
 
 ## Map based movement -movement model specific settings
@@ -99,10 +148,11 @@ MapBasedMovement.mapFile1 = data/roads.wkt
 
 
 # Reports
-Report.nrofReports = 1
+Report.nrofReports = 2
 Report.warmup = 0
 Report.reportDir = reports/PublishAndSubscribe
-    Report.report1 = PublishSubsReport
+Report.report1 = PublishSubsReport
+Report.report2 = SubscriberGetKey
 
 # Optimization settings
 Optimization.cellSizeMult = 5
