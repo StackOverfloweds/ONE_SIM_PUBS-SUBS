@@ -22,20 +22,20 @@ import java.util.*;
 public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber {
     // Namespace settings
     private static final String PUBSROUTING_NS = "PublishAndSubscriberRouting";
-    protected static final String LCNUM = "LCNUM";
+    private static final String LCNUM = "LCNUM";
 
     // Static maps for managing topics, subscriptions, encryption, and authentication keys
-    public static Map<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> subscribedTopics;
+    private Map<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> subscribedTopics;
     // Key: topic & subscriber ID, Value: list of numeric attributes
-    public static Map<DTNHost, List<TupleDe<Boolean, Integer>>> registeredTopics;
-    public static Map<DTNHost, TupleDe<String, String>> keyEncryption;
-    public static Map<DTNHost, List<TupleDe<String, String>>> keyAuthentication;
+    private Map<DTNHost, List<TupleDe<Boolean, Integer>>> registeredTopics;
+    private Map<DTNHost, TupleDe<String, String>> keyEncryption;
+    private Map<DTNHost, List<TupleDe<String, String>>> keyAuthentication;
     private Map<DTNHost, List<TupleDe<List<Boolean>, List<Integer>>>> tempTopicsM; //for temp regis
     // 🔹 Temporary storage for subscribers' interests
     private Map<DTNHost, List<TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>>>> tempSubscribersM;
 
     // Static integer for local counter number
-    public static int lcnum;
+    private static int lcnum;
 
     // Counters for reporting message and data statistics
     private int msgReceived = 0;
@@ -133,73 +133,56 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber 
     }
 
     private void processRegisteredTopics(DTNHost otherNode) {
-        // Ensure only publishers can register topics
+        // Pastikan hanya publisher yang dapat mendaftarkan topik
         if (!otherNode.isPublisher()) {
             return;
         }
 
-        // Ensure this node has previously exchanged data
-        if (!tempTopicsM.containsKey(otherNode)) {
-            return;
-        }
-
-        // 🔹 Find the KDC host
-        DTNHost kdcHost = null;
-        for (DTNHost host : SimScenario.getInstance().getHosts()) {
-            if (host.isKDC()) {
-                kdcHost = host;
-                break; // Stop once KDC is found
-            }
-        }
-
-        // Ensure that a KDC exists before registering
-        if (kdcHost == null) {
-            return;
-        }
-
+        // Pastikan node memiliki data yang dapat diproses
         List<TupleDe<List<Boolean>, List<Integer>>> tempTopics = tempTopicsM.get(otherNode);
         if (tempTopics == null || tempTopics.isEmpty()) {
             return;
         }
 
-        // Initialize registeredTopics entry if not present
-        if (!registeredTopics.containsKey(otherNode)) {
-            registeredTopics.put(otherNode, new ArrayList<>());
+        // Cari host KDC
+        DTNHost kdcHost = SimScenario.getInstance().getHosts().stream()
+                .filter(DTNHost::isKDC)
+                .findFirst()
+                .orElse(null);
+
+        // Pastikan KDC tersedia sebelum mendaftarkan topik
+        if (kdcHost == null) {
+            return;
         }
 
-        List<TupleDe<Boolean, Integer>> registeredList = registeredTopics.get(otherNode);
-        Set<TupleDe<Boolean, Integer>> existingEntries = new HashSet<>(registeredList);
-
-        // Process topics while avoiding duplicates
-        List<TupleDe<Boolean, Integer>> tempRegistered = new ArrayList<>();
+        // Proses topik yang akan didaftarkan
+        Map<DTNHost, TupleDe<Boolean, Integer>> getTop = new HashMap<>();
 
         for (TupleDe<List<Boolean>, List<Integer>> tuple : tempTopics) {
-            for (int i = 0; i < Math.min(tuple.getFirst().size(), tuple.getSecond().size()); i++) {
-                TupleDe<Boolean, Integer> newEntry = new TupleDe<>(tuple.getFirst().get(i), tuple.getSecond().get(i));
+            int minSize = Math.min(tuple.getFirst().size(), tuple.getSecond().size());
 
-                if (!existingEntries.contains(newEntry)) {
-                    // 🔹 Try to add the registered topic to KDC buffer
-                    if (!addToBufferForKDC(kdcHost, newEntry)) {
-                        System.out.println("❌ Buffer addition failed, canceling registration for: " + otherNode);
+            for (int i = 0; i < minSize; i++) {
+                Boolean firstValue = tuple.getFirst().get(i);
+                Integer secondValue = tuple.getSecond().get(i);
 
-                        // Rollback: Remove previously registered entries
-                        registeredList.removeAll(tempRegistered);
-                        return;
-                    }
-
-                    registeredList.add(newEntry);
-                    existingEntries.add(newEntry);
-                    tempRegistered.add(newEntry);
+                if (secondValue <= 0) {
+                    continue; // Lewati entry yang tidak valid
                 }
+
+                TupleDe<Boolean, Integer> newEntry = new TupleDe<>(firstValue, secondValue);
+                getTop.put(otherNode, newEntry);
             }
         }
 
-//        System.out.println("✅ Topics registered for publisher: " + otherNode);
+        // Kirim data ke KDC jika ada entry yang valid
+        if (!getTop.isEmpty()) {
+            addToBufferForKDCToRegistration(kdcHost, getTop);
+        }
 
-        // Clear tempTopicsM after processing
-        tempTopicsM.clear();
-//        System.out.println("📌 registeredTopics size: " + registeredTopics.size());
+        // Bersihkan tempTopicsM setelah selesai
+        tempTopicsM.remove(otherNode);
     }
+
 
     /**
      * Checks and processes the interest of the subscriber.
@@ -214,7 +197,6 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber 
         List<TupleDe<Integer, Integer>> numericAtribute = host.getNumericAtribute();
 
         if (socialProfile == null || socialProfileOI == null || numericAtribute == null) {
-            System.err.println("Error: Missing subscriber attributes.");
             return;
         }
 
@@ -230,271 +212,254 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber 
     }
 
     public void processSubscribedTopics(DTNHost otherNode) {
-        // Ensure only Subscribers can Subscribe
-        if (!otherNode.isSubscriber()) {
-            return;
-        }
+        if (!otherNode.isSubscriber()) return;
 
-        // Ensure this node has previously exchanged data
         List<TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>>> tempDataList = tempSubscribersM.get(otherNode);
-        if (tempDataList == null || tempDataList.isEmpty()) {
-            return;
-        }
+        if (tempDataList == null || tempDataList.isEmpty()) return;
 
-        // 🔹 Find the KDC host
-        DTNHost kdcHost = null;
-        for (DTNHost host : SimScenario.getInstance().getHosts()) {
-            if (host.isKDC()) {
-                kdcHost = host;
-                break;
-            }
-        }
+        DTNHost kdcHost = SimScenario.getInstance().getHosts().stream()
+                .filter(DTNHost::isKDC)
+                .findFirst()
+                .orElse(null);
+        if (kdcHost == null) return;
 
-        // Ensure that a KDC exists before subscribing
-        if (kdcHost == null) {
-            return;
-        }
-
-        // Ensure `subscribedTopics` entry exists
-        if (!subscribedTopics.containsKey(otherNode)) {
-            subscribedTopics.put(otherNode, new TupleDe<>(new LinkedList<>(), new LinkedList<>()));
-        }
+        subscribedTopics.putIfAbsent(otherNode, new TupleDe<>(new LinkedList<>(), new LinkedList<>()));
         TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> subscribedList = subscribedTopics.get(otherNode);
-
-        // Store existing entries to avoid duplicates
         Set<TupleDe<Boolean, TupleDe<Integer, Integer>>> existingEntries = new HashSet<>();
 
-        // Get registered topics to check for matches
-        Map<DTNHost, List<TupleDe<Boolean, Integer>>> topics = registeredTopics;
+        DTNHost host = getHost();
+        if (host == null) return;
 
-        // 🔹 **Inisialisasi subscriberTopicMap & existingAttributes agar tidak null**
-        Map<TupleDe<DTNHost, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, DTNHost>>> subscriberTopicMap = new HashMap<>();
-        List<TupleDe<Integer, Integer>> existingAttributes = new ArrayList<>();
+        Collection<Connection> connections = getConnections();
+        if (connections == null || connections.isEmpty()) return;
 
-        // 🔹 Batasi jumlah langganan untuk mencegah alokasi berlebihan
-        int maxSubscriptions = 10;
-        int subscriptionCount = 0;
-        boolean allSubscriptionsSuccessful = true;
+        Collection<Message> msgCollection = getMessageCollection();
+        if (msgCollection == null || msgCollection.isEmpty()) return;
 
-        Iterator<TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>>> tempIterator = tempDataList.iterator();
-        while (tempIterator.hasNext()) {
-            TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>> tempData = tempIterator.next();
-            List<Boolean> socialProfileOI = tempData.getFirst().getSecond();
-            List<TupleDe<Integer, Integer>> topicAttributes = tempData.getSecond();
+        for (Connection con : connections) {
+            DTNHost other = con.getOtherNode(host);
+            PublishAndSubscriberRouting othRouter = (PublishAndSubscriberRouting) other.getRouter();
+            if (othRouter.isTransferring()) continue;
 
-            if (topicAttributes.isEmpty() || socialProfileOI.isEmpty()) {
-                continue; // Hindari pemrosesan jika data tidak lengkap
-            }
+            for (Message msg : msgCollection) {
+                if (msg == null) return;
 
-            Iterator<TupleDe<Integer, Integer>> subTopicIterator = topicAttributes.iterator();
-            while (subTopicIterator.hasNext()) {
-                if (subscriptionCount >= maxSubscriptions) {
-                    break;
+                Map<DTNHost, TupleDe<Boolean, Integer>> topics =
+                        (Map<DTNHost, TupleDe<Boolean, Integer>>) msg.getProperty(MESSAGE_REGISTER_S);
+                if (topics == null || topics.isEmpty()) continue;
+
+                Map<TupleDe<DTNHost, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, DTNHost>>> subscriberTopicMap = new HashMap<>();
+                List<TupleDe<Integer, Integer>> existingAttributes = new ArrayList<>();
+
+                int maxSubscriptions = 10;
+                int subscriptionCount = 0;
+                boolean allSubscriptionsSuccessful = true;
+
+                Iterator<TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>>> tempIterator = tempDataList.iterator();
+                while (tempIterator.hasNext()) {
+                    TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>> tempData = tempIterator.next();
+                    List<Boolean> socialProfileOI = tempData.getFirst().getSecond();
+                    List<TupleDe<Integer, Integer>> topicAttributes = tempData.getSecond();
+
+                    if (topicAttributes.isEmpty() || socialProfileOI.isEmpty()) continue;
+
+                    Iterator<TupleDe<Integer, Integer>> subTopicIterator = topicAttributes.iterator();
+                    while (subTopicIterator.hasNext() && subscriptionCount < maxSubscriptions) {
+                        TupleDe<Integer, Integer> subTopicEntry = subTopicIterator.next();
+                        boolean topicExists = false;
+
+                        for (Map.Entry<DTNHost, TupleDe<Boolean, Integer>> entry : topics.entrySet()) {
+                            DTNHost publisherHost = entry.getKey();
+                            TupleDe<Boolean, Integer> registeredValues = entry.getValue();
+                            Boolean topicBoolean = registeredValues.getFirst();
+                            Integer registeredSubTopic = registeredValues.getSecond();
+
+                            if (socialProfileOI.contains(topicBoolean) &&
+                                    registeredSubTopic >= subTopicEntry.getFirst() &&
+                                    registeredSubTopic <= subTopicEntry.getSecond()) {
+                                topicExists = true;
+                                TupleDe<Boolean, TupleDe<Integer, Integer>> newEntry = new TupleDe<>(topicBoolean, subTopicEntry);
+
+                                if (existingEntries != null && existingEntries.add(newEntry)) { // ✅ Cek null sebelum akses
+                                    subscribedList.getFirst().add(topicBoolean);
+                                    subscribedList.getSecond().add(subTopicEntry);
+                                    subscriptionCount++;
+
+                                    subscriberTopicMap.computeIfAbsent(new TupleDe<>(otherNode, socialProfileOI), k -> new ArrayList<>())
+                                            .add(new TupleDe<>(new TupleDe<>(topicBoolean, registeredSubTopic), publisherHost));
+
+                                    Map<DTNHost, TupleDe<Boolean, TupleDe<Integer, Integer>>> topicEntry = new HashMap<>();
+
+                                    // ✅ Perbaikan: Buat TupleDe<Integer, Integer> baru
+                                    TupleDe<Integer, Integer> subTopicTuple = new TupleDe<>(registeredSubTopic, 0); // Sesuaikan angka kedua jika perlu
+
+                                    // ✅ Buat tuple sesuai dengan tipe yang diminta
+                                    TupleDe<Boolean, TupleDe<Integer, Integer>> tupleValue = new TupleDe<>(topicBoolean, subTopicTuple);
+                                    topicEntry.put(otherNode, tupleValue);
+
+                                    existingAttributes.add(subTopicEntry);
+                                    subscribedTopics.put(otherNode, subscribedList);
+
+                                    // ✅ Sekarang topicEntry memiliki tipe yang benar
+//                                    addToBufferForKDCToSubscribe(kdcHost, topicEntry);
+                                }
+                            }
+                            if (topicExists) break;
+                        }
+                        subTopicIterator.remove();
+                    }
+                    tempIterator.remove();
                 }
 
-                TupleDe<Integer, Integer> subTopicEntry = subTopicIterator.next();
-                boolean topicExists = false;
+                if (!allSubscriptionsSuccessful || subscriberTopicMap.isEmpty()) {
+                    subscribedTopics.remove(otherNode);
+                    return;
+                }
+                tempSubscribersM.remove(otherNode);
+                subscribedTopics.remove(otherNode);
 
-                for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : topics.entrySet()) {
-                    DTNHost publisherHost = entry.getKey();
-                    List<TupleDe<Boolean, Integer>> registeredValues = entry.getValue();
+                if (subscriberTopicMap.isEmpty()) {
+                    return;
+                }
 
-                    for (TupleDe<Boolean, Integer> registeredValue : registeredValues) {
-                        Boolean topicBoolean = registeredValue.getFirst();
-                        Integer registeredSubTopic = registeredValue.getSecond();
+                // ✅ **Build NAKT dengan subscriberTopicMap dan existingAttributes**
+//                System.out.println("✅ Building NAKT...");
+                NAKTBuilder nakt = new NAKTBuilder(lcnum);
+                if (nakt.buildNAKT(subscriberTopicMap, existingAttributes)) {
+//                    System.out.println("✅ NAKT successfully built.");
 
-                        // ✅ **Cek apakah subscriber memiliki topik yang sama dengan publisher**
-                        if (socialProfileOI.contains(topicBoolean) &&
-                                registeredSubTopic >= subTopicEntry.getFirst() &&
-                                registeredSubTopic <= subTopicEntry.getSecond()) {
+                    Map<DTNHost, TupleDe<String, String>> publisherKeys = nakt.getKeysForPublisher();
+                    Map<DTNHost, List<TupleDe<String, String>>> subscriberKeys = nakt.getKeysForSubscriber();
 
-                            topicExists = true;
-                            TupleDe<Boolean, TupleDe<Integer, Integer>> newEntry = new TupleDe<>(topicBoolean, subTopicEntry);
-
-                            if (!existingEntries.contains(newEntry)) {
-                                subscribedList.getFirst().add(topicBoolean);
-                                subscribedList.getSecond().add(subTopicEntry);
-                                existingEntries.add(newEntry);
-                                subscriptionCount++;
-
-                                System.out.println("✅ Successfully subscribed to topic: " + topicBoolean + " | Sub-Topic: " + subTopicEntry);
-
-                                // 🔹 **Tambahkan ke subscriberTopicMap**
-                                TupleDe<TupleDe<Boolean, Integer>, DTNHost> publisherInfo =
-                                        new TupleDe<>(new TupleDe<>(topicBoolean, registeredSubTopic), publisherHost);
-
-                                TupleDe<DTNHost, List<Boolean>> subscriberInfo =
-                                        new TupleDe<>(otherNode, socialProfileOI);
-
-                                // Pastikan subscriberInfo ada dalam subscriberTopicMap
-                                subscriberTopicMap.computeIfAbsent(subscriberInfo, k -> new ArrayList<>())
-                                        .add(publisherInfo);
-
-                                // 🔹 **Tambahkan existingAttributes**
-                                existingAttributes.add(subTopicEntry);
-
-                                // 🔹 **Tambahkan ke buffer KDC**
-                                boolean addedToBuffer = addToBufferForKDCToSubscribe(kdcHost, newEntry, otherNode);
-                                if (!addedToBuffer) {
-                                    System.out.println("❌ Subscription failed: Unable to add message to KDC buffer.");
-                                    allSubscriptionsSuccessful = false;
-                                    break;
-                                }
+                    if (publisherKeys != null && !publisherKeys.isEmpty()) {
+                        for (Map.Entry<DTNHost, TupleDe<String, String>> entryKey : publisherKeys.entrySet()) {
+                            if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
+                                keyEncryption.put(entryKey.getKey(), entryKey.getValue());
                             }
                         }
                     }
-                    if (topicExists) break;
-                }
 
-                subTopicIterator.remove();
-            }
-
-            tempIterator.remove();
-        }
-
-        // **Jika tidak ada subscription yang berhasil, rollback semuanya**
-        if (!allSubscriptionsSuccessful || subscriberTopicMap.isEmpty()) {
-            System.out.println("❌ Rolling back subscriptions for: " + otherNode);
-            subscribedTopics.remove(otherNode);
-            return;
-        }
-
-        // Bersihkan tempSubscribersM untuk subscriber ini setelah selesai
-        tempSubscribersM.remove(otherNode);
-
-        // 🔹 **Cek subscriberTopicMap sebelum membangun NAKT**
-        if (subscriberTopicMap.isEmpty()) {
-            System.out.println("⚠️ subscriberTopicMap is empty, skipping NAKT generation.");
-            return;
-        }
-
-        // ✅ **Build NAKT dengan subscriberTopicMap dan existingAttributes**
-        System.out.println("✅ Building NAKT...");
-        NAKTBuilder nakt = new NAKTBuilder(lcnum);
-        if (nakt.buildNAKT(subscriberTopicMap, existingAttributes)) {
-            System.out.println("✅ NAKT successfully built.");
-
-            Map<DTNHost, TupleDe<String, String>> publisherKeys = nakt.getKeysForPublisher();
-            Map<DTNHost, List<TupleDe<String, String>>> subscriberKeys = nakt.getKeysForSubscriber();
-
-            if (publisherKeys != null && !publisherKeys.isEmpty()) {
-                for (Map.Entry<DTNHost, TupleDe<String, String>> entryKey : publisherKeys.entrySet()) {
-                    if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
-                        keyEncryption.put(entryKey.getKey(), entryKey.getValue());
+                    if (subscriberKeys != null && !subscriberKeys.isEmpty()) {
+                        for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entryKey : subscriberKeys.entrySet()) {
+                            if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
+                                keyAuthentication.put(entryKey.getKey(), entryKey.getValue());
+                            }
+                        }
                     }
+                } else {
+                    System.out.println("❌ Failed to build NAKT.");
                 }
             }
-
-            if (subscriberKeys != null && !subscriberKeys.isEmpty()) {
-                for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entryKey : subscriberKeys.entrySet()) {
-                    if (entryKey.getValue() != null && !entryKey.getValue().isEmpty()) {
-                        keyAuthentication.put(entryKey.getKey(), entryKey.getValue());
-                    }
-                }
-            }
-        } else {
-            System.out.println("❌ Failed to build NAKT.");
         }
     }
 
+
     /**
-     * Creates a new message to be published.
-     * Ensures that the host is registered and encrypts the message
-     * before adding it to the message queue.
+     * Creates multiple new messages to be published.
+     * Ensures that the host is registered and encrypts the messages
+     * before adding them to the message queue.
      *
      * @param msg The message object to be created.
-     * @return true if the message is successfully created, false otherwise.
+     * @return true if at least one message is successfully created, false otherwise.
      */
     @Override
     public boolean createNewMessage(Message msg) {
-        List<DTNHost> allHosts = SimScenario.getInstance().getHosts();
-
-        // **Pastikan ada host, enkripsi, dan registeredTopics**
-        if (allHosts == null || allHosts.isEmpty() || keyEncryption.isEmpty() || registeredTopics.isEmpty()) {
-            System.out.println("❌ No hosts, encryption keys, or registered topics available.");
+        // 🔍 **Validasi Awal**
+        if (keyEncryption == null || keyEncryption.isEmpty()) {
             return false;
         }
 
-        DTNHost hostId = getHost();  // **Ambil ID host saat ini**
-
-        // **Langsung cek apakah host memiliki registeredTopics**
-        List<TupleDe<Boolean, Integer>> registeredList = registeredTopics.get(hostId);
-        if (registeredList == null || registeredList.isEmpty()) {
-            System.out.println("⚠️ No registered topics for host: " + hostId);
+        Collection<Connection> connections = getConnections();
+        if (connections == null || connections.isEmpty()) {
             return false;
         }
 
-        boolean messageCreated = false;
-        Set<TupleDe<Boolean, Integer>> sentMessages = new HashSet<>(); // 🔹 **Set untuk melacak pesan yang sudah dikirim**
+        DTNHost host = getHost();
+        if (host == null) {
+            return false;
+        }
 
-        // **Iterasi melalui semua host**
-        for (DTNHost host : allHosts) {
-            TupleDe<String, String> keys = keyEncryption.get(host);
+        Collection<Message> msgCollection = getMessageCollection();
+        if (msgCollection == null || msgCollection.isEmpty()) {
+            return false;
+        }
 
-            if (keys == null || keys.getSecond() == null || keys.getSecond().isEmpty()) {
-                continue;  // **Lewati host yang tidak memiliki kunci enkripsi**
+        System.out.println("📌 Starting message creation process...");
+
+        List<Message> messagesToSend = new ArrayList<>();
+
+        for (Connection con : connections) {
+            DTNHost other = con.getOtherNode(host);
+            PublishAndSubscriberRouting othRouter = (PublishAndSubscriberRouting) other.getRouter();
+
+            if (othRouter.isTransferring()) {
+                continue;
             }
 
-            for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : registeredTopics.entrySet()) {
-                List<TupleDe<Boolean, Integer>> topicList = entry.getValue();
-
-                if (topicList == null || topicList.isEmpty()) {
+            for (Message m : msgCollection) {
+                if (m == null) {
                     continue;
                 }
 
-                for (TupleDe<Boolean, Integer> getVal : topicList) {
-                    // **Pastikan nilai valid**
-                    if (getVal == null || getVal.getFirst() == null || getVal.getSecond() == null) {
+                Map<DTNHost, TupleDe<Boolean, Integer>> getRegisTop =
+                        (Map<DTNHost, TupleDe<Boolean, Integer>>) m.getProperty(MESSAGE_REGISTER_S);
+
+                if (getRegisTop == null || getRegisTop.isEmpty()) {
+                    continue;
+                }
+
+                int messageCount = 0;
+                for (Map.Entry<DTNHost, TupleDe<Boolean, Integer>> topic : getRegisTop.entrySet()) {
+                    if (topic == null || topic.getValue() == null ||
+                            topic.getValue().getFirst() == null ||
+                            topic.getValue().getSecond() == null) {
                         continue;
                     }
 
-                    // **Cek apakah pesan ini sudah pernah dikirim oleh host ini**
-                    if (sentMessages.contains(getVal)) {
-                        System.out.println("⚠️ Duplicate message detected, skipping: " + getVal);
+                    DTNHost topicHost = topic.getKey();
+                    TupleDe<Boolean, Integer> topicData = topic.getValue();
+
+                    // **Cek apakah ada kunci enkripsi untuk host ini**
+                    if (!keyEncryption.containsKey(topicHost)) {
                         continue;
                     }
 
-                    // **Proses Enkripsi**
-                    String randomMessage = "abcdefghijABCDEFGHIJ"; // 20 karakter
-                    String keyEncrypt = keys.getSecond();
-                    String hashedMessage = EncryptionUtil.encryptMessage(randomMessage, keyEncrypt);
+                    TupleDe<String, String> encryptionKey = keyEncryption.get(topicHost);
+
+                    // 🔒 **Proses Enkripsi**
+                    String randomMessage = "abcdefghijABCDEFGHIJ" + messageCount; // 20 karakter unik
+                    String hashedMessage = EncryptionUtil.encryptMessage(randomMessage, encryptionKey.getSecond());
 
                     Map<Boolean, TupleDe<Integer, String>> messageData = new HashMap<>();
-                    TupleDe<Integer, String> value = new TupleDe<>(getVal.getSecond(), hashedMessage);
-                    messageData.put(getVal.getFirst(), value);
+                    messageData.put(topicData.getFirst(), new TupleDe<>(topicData.getSecond(), hashedMessage));
 
-                    // **Debugging**
-                    System.out.println("🔹 Creating message...");
-                    System.out.println("   - Plain Text: " + randomMessage);
-                    System.out.println("   - Encryption Key: " + keyEncrypt);
-                    System.out.println("   - Encrypted Text: " + hashedMessage);
-
-                    // **Pastikan ada ruang sebelum menambahkan pesan**
-                    if (!makeRoomForMessage(msg.getSize())) {
-                        System.out.println("❌ Not enough space in buffer for message.");
-                        return false;
-                    }
-
-                    // **Tambahkan pesan ke buffer**
+                    // **Buat duplikasi pesan sebelum ditambahkan**
+                    makeRoomForMessage(msg.getSize());
                     msg.setTtl(this.msgTtl);
                     msg.addProperty(MESSAGE_TOPICS_S, messageData);
-                    addToMessages(msg, true);
-                    messageCreated = true;
 
-                    // 🔹 **Tambahkan ke Set agar tidak dikirim dua kali**
-                    sentMessages.add(getVal);
+                    messagesToSend.add(msg);
+                    messageCount++;
 
-                    System.out.println("✅ Success create message with encryption: " + msg.getProperty(MESSAGE_TOPICS_S));
+                    if (messageCount >= 3) {
+                        break;
+                    }
+                }
+
+                // **Kirim semua pesan yang berhasil dibuat**
+                if (!messagesToSend.isEmpty()) {
+                    for (Message message : messagesToSend) {
+                        addToMessages(message, true);
+                        super.createNewMessage(message);
+                    }
+
+                    System.out.println("✅ Message successfully created: " + msg.getProperty(MESSAGE_TOPICS_S));
+                    return true;
                 }
             }
         }
-
-        // **Kirim pesan hanya jika berhasil dibuat**
-        return messageCreated && super.createNewMessage(msg);
+        return false; // 🔹 **Return false jika tidak ada pesan yang dibuat**
     }
-
-
-
 
     /**
      * Handles the transfer of messages between hosts.
@@ -507,6 +472,8 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber 
      */
     @Override
     public Message messageTransferred(String id, DTNHost from) {
+//        System.out.println("msg received: " + id);
+
         Message incoming = removeFromIncomingBuffer(id, from);
         if (incoming == null) {
             throw new SimError("No message found with ID " + id + " in the incoming buffer.");
@@ -525,26 +492,27 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber 
                 break;
             }
         }
-        // Cek apakah host subscriber sudah terdaftar dalam subscribedTopics
-        boolean isSubscribed = false;
 
-        // Loop melalui subscribedTopics untuk mencocokkan hostId
-        if (subscribedTopics.containsKey(getHost())) {
-            isSubscribed = true;
-        }
+        // Cek apakah host ini merupakan subscriber yang sah
+        boolean isSubscribed = getHost().isSubscriber();
 
         if (!isSubscribed) {
-            return null; // Jika tidak terdaftar, hentikan proses
+//            System.out.println("⛔ Host " + getHost() + " is not a subscriber. Message dropped.");
+            return null;
         }
 
+
+        // Pesan akan diteruskan jika lolos validasi
         Message aMessage = (outgoing == null) ? incoming : outgoing;
         boolean isFinalRecipient = isFinalDest(aMessage, getHost(), keyAuthentication);
         boolean isFirstDelivery = isFinalRecipient && !isDeliveredMessage(aMessage);
 
+//        System.out.println("🔍 Message processing: " + id + " | Final recipient: " + isFinalRecipient);
 
         if (outgoing != null && !isFinalRecipient) {
             addToMessages(aMessage, false);
         }
+
         if (isFirstDelivery) {
             this.deliveredMessages.put(id, aMessage);
         }
@@ -639,7 +607,6 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber 
      */
     private Tuple<Message, Connection> tryOtherMessages() {
         List<Tuple<Message, Connection>> messages = new ArrayList<>();
-        List<Tuple<Message, Connection>> tempMessages = new ArrayList<>();
 
         // Get all connections
         Collection<Connection> connections = getConnections();
@@ -665,7 +632,7 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber 
         // Iterate through all connections
         for (Connection con : connections) {
             DTNHost other = con.getOtherNode(host);
-            CCDTN othRouter = (CCDTN) other.getRouter();
+            PublishAndSubscriberRouting othRouter = (PublishAndSubscriberRouting) other.getRouter();
 
             if (othRouter.isTransferring()) {
                 continue;
@@ -679,21 +646,16 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber 
                         continue;
                     }
 
-                    if (othRouter.hasMessage(msg.getId())) {
-                        continue; // skip messages that the other one has
-                    }
+                    // Cek apakah message sesuai dengan minat penerima
                     if (isSameInterest(msg, other)) {
-                        tempMessages.add(new Tuple<>(msg, con));
+                        messages.add(new Tuple<>(msg, con));
                     }
                 }
             }
         }
 
         // Sort messages based on interest similarity
-        Collections.sort(tempMessages, new InterestSimilarityComparator());
-
-        messages.addAll(tempMessages);
-        tempMessages.clear();
+        messages.sort(new InterestSimilarityComparator());
 
         // If no messages are found, return null
         if (messages.isEmpty()) {
@@ -703,6 +665,7 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber 
         // Try to transfer the messages
         return tryMessagesForConnected(messages);
     }
+
 
     /**
      * Gets the total amount of data received by this router.

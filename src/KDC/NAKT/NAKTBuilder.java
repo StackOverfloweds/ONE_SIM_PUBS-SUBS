@@ -34,7 +34,6 @@ public class NAKTBuilder extends KeyManager {
     public boolean buildNAKT(Map<TupleDe<DTNHost, List<Boolean>>, List<TupleDe<TupleDe<Boolean, Integer>, DTNHost>>> subscriberTopicMap,
                              List<TupleDe<Integer, Integer>> existingAttributes) {
         if (subscriberTopicMap == null || subscriberTopicMap.isEmpty() || existingAttributes == null || existingAttributes.isEmpty()) {
-            System.out.println("subscriberTopicMap is null or empty "+ subscriberTopicMap);
             return false;
         }
 
@@ -157,9 +156,9 @@ public class NAKTBuilder extends KeyManager {
 
 
 // 🔹 **Logging Debugging**
-        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
-        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
-        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);
+//        System.out.println("🔹 Level " + depth + " (" + binaryPath + ")");
+//        System.out.println("  ├── Left Key (" + leftPath + "): " + leftKey);
+//        System.out.println("  └── Right Key (" + rightPath + "): " + rightKey);
 
         // 🔹 **Recursive call to generate deeper key nodes**
         encryptTreeNodes(min, mid, leftKey, leftPath, depth + 1, keyList);

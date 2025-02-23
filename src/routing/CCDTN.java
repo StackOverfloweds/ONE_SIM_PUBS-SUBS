@@ -21,6 +21,9 @@ public class CCDTN extends ActiveRouter {
 
     // Constant for storing message topics
     public static final String MESSAGE_TOPICS_S = "topic";
+    public static final String MESSAGE_REGISTER_S = "KDC_Register_";
+    public static final String MESSAGE_SUBSCRIBE_S = "KDC_Subscribe_";
+
 
     // Maps to store connection timestamps and history
     protected Map<DTNHost, Double> startTimestamps;
@@ -88,18 +91,21 @@ public class CCDTN extends ActiveRouter {
      * @return True if the message is at its final destination, false otherwise
      */
     protected boolean isFinalDest(Message m, DTNHost host, Map<DTNHost, List<TupleDe<String, String>>> keyAuth) {
-        Map<Boolean, TupleDe<Integer, String>> finalDestMap = getTopicMap(m);
+        Map<Boolean, TupleDe<Integer, String>> finalDestMap = (Map<Boolean, TupleDe<Integer, String>>) m.getProperty(MESSAGE_TOPICS_S);
 
+//        System.out.println("FINAL DEST MAP: " + finalDestMap);
         if (finalDestMap == null || finalDestMap.isEmpty()) {
             return false;
         }
 
         List<Boolean> hostTopicNode = host.getSocialProfileOI();
         List<Double> hostWeightNode = host.getSocialProfile();
+        System.out.println("halo top");
 
         if (hostTopicNode == null || hostWeightNode == null || hostTopicNode.isEmpty() || hostWeightNode.isEmpty()) {
             return false;
         }
+
 
         for (Map.Entry<Boolean, TupleDe<Integer, String>> entry : finalDestMap.entrySet()) {
             if (hostTopicNode.contains(entry.getKey())) {
@@ -124,7 +130,6 @@ public class CCDTN extends ActiveRouter {
     protected boolean authenticateSubscriber(DTNHost from, String topicName, Map<DTNHost, List<TupleDe<String, String>>> keyAuth) {
         // Map lokal untuk melacak pesan yang sudah diterima dalam metode ini saja
         Map<DTNHost, Set<String>> receivedMessages = new HashMap<>();
-
         for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : keyAuth.entrySet()) {
             DTNHost subscriberId = entry.getKey();
             List<TupleDe<String, String>> keyList = entry.getValue();
@@ -136,8 +141,9 @@ public class CCDTN extends ActiveRouter {
             for (DTNHost getSub : SimScenario.getInstance().getHosts()) {
                 if (getSub.getRouter() instanceof CCDTN) {
                     if (connHistory.containsKey(subscriberId)) {
+//                        System.out.println("same");
                         TupleDe<String, String> decryptedContent = DecryptUtil.decryptMessage(topicName, keyList);
-
+//                        System.out.println("dekrip : "+decryptedContent);
                         if (decryptedContent != null && !decryptedContent.getSecond().isEmpty()) {
                             String decryptedMessage = decryptedContent.getSecond();
 
@@ -167,21 +173,6 @@ public class CCDTN extends ActiveRouter {
 
 
     /**
-     * Retrieves the topic map from the given message.
-     *
-     * @param msg The message containing topic data
-     * @return A map of topic interests or null if retrieval fails
-     */
-    protected Map<Boolean, TupleDe<Integer, String>> getTopicMap(Message msg) {
-        try {
-            return (Map<Boolean, TupleDe<Integer, String>>) msg.getProperty(MESSAGE_TOPICS_S);
-        } catch (ClassCastException e) {
-            System.out.println("Error: MESSAGE_TOPICS_S property is not valid.");
-            return null;
-        }
-    }
-
-    /**
      * Determines if a host shares the same interests as a message.
      *
      * @param m    The message being evaluated
@@ -189,25 +180,24 @@ public class CCDTN extends ActiveRouter {
      * @return True if interests match, false otherwise
      */
     protected boolean isSameInterest(Message m, DTNHost host) {
-        Map<Boolean, TupleDe<Integer, String>> topicMap = getTopicMap(m);
-
-        if (topicMap == null || topicMap.isEmpty()) {
-            return false;
-        }
-
+        Map<Boolean, TupleDe<Integer, String>> topicMap = (Map<Boolean, TupleDe<Integer, String>>) m.getProperty(MESSAGE_TOPICS_S);
         List<Boolean> topicNode = host.getSocialProfileOI();
-        if (topicNode == null) {
+        if (topicMap == null || topicNode == null) {
             return false;
         }
 
-        for (Boolean topic : topicMap.keySet()) {
-            if (topicNode.contains(topic)) {
+        Iterator<Boolean> itTop = topicMap.keySet().iterator();
+        int i = 0;
+        while (itTop.hasNext()) {
+            if (itTop.next().equals(topicNode.get(i))) {
                 return true;
             }
+            i++;
         }
 
         return false;
     }
+
 
     /**
      * Counts the interest weights that match the message topics.
@@ -217,7 +207,7 @@ public class CCDTN extends ActiveRouter {
      * @return A list of matching interest weights
      */
     protected List<Double> countInterestTopic(Message m, DTNHost host) {
-        Map<Boolean, TupleDe<Integer, String>> topicMap = getTopicMap(m);
+        Map<Boolean, TupleDe<Integer, String>> topicMap = (Map<Boolean, TupleDe<Integer, String>>) m.getProperty(MESSAGE_TOPICS_S);
 
         if (topicMap == null || topicMap.isEmpty()) {
             return null;
@@ -240,9 +230,9 @@ public class CCDTN extends ActiveRouter {
         return valInterest;
     }
 
-    protected boolean addToBufferForKDC(DTNHost kdcHost, TupleDe<Boolean, Integer> topicEntry) {
+    protected Message addToBufferForKDCToRegistration(DTNHost kdcHost, Map<DTNHost, TupleDe<Boolean, Integer>> topicEntry) {
         if (!kdcHost.isKDC()) {
-            return false;
+            return null;
         }
 
         // Generate a new message
@@ -250,49 +240,37 @@ public class CCDTN extends ActiveRouter {
         DTNHost sender = getHost(); // The node that registered the topic
 
         // Calculate message size dynamically from topicEntry
-        int msgSize = topicEntry.getSize();
+        int msgSize = topicEntry.size();
 
-        // Ensure buffer has enough space before adding
-        if (!makeRoomForMessage(msgSize)) {
-            System.out.println("⚠️ Not enough buffer space for message: " + msgId + " (Size: " + msgSize + " bytes)");
-            return false;
-        }
-
+        makeRoomForMessage(msgSize);
         // Create a new message with the correct constructor
         Message newMessage = new Message(sender, kdcHost, msgId, msgSize);
-        newMessage.setTtl(this.msgTtl);
-        newMessage.addProperty("registeredTopic", topicEntry);
-
         // Add message to buffer using addToMessages()
-        addToMessages(newMessage, true);
+        newMessage.addProperty(MESSAGE_REGISTER_S, topicEntry);
+        addToMessages(newMessage, false);
 //        System.out.println("✅ Successfully added registration message to KDC buffer: " + msgId);
-        return true;
+        return newMessage;
     }
 
-    protected boolean addToBufferForKDCToSubscribe(DTNHost kdcHost, TupleDe<Boolean, TupleDe<Integer, Integer>> topicEntry, DTNHost subscriber) {
+    protected Message addToBufferForKDCToSubscribe(DTNHost kdcHost, Map<DTNHost,TupleDe<Boolean, TupleDe<Integer, Integer>>> topicEntry) {
         if (!kdcHost.isKDC()) {
-            return false;
+            return null;
         }
 
         // Generate a new message
         String msgId = "KDC_SUBSCRIBE_" + System.currentTimeMillis();
-        DTNHost sender = subscriber; // The subscriber who registered the topic
+        DTNHost sender = getHost(); // The subscriber who registered the topic
 
         // Calculate message size dynamically from topicEntry
-        int msgSize = topicEntry.getSize();
-
+        int msgSize = topicEntry.size();
         // Ensure buffer has enough space before adding
-        if (!makeRoomForMessage(msgSize)) {
-            return false;
-        }
-
+        makeRoomForMessage(msgSize);
         // Create a new message with the correct constructor
         Message newMessage = new Message(sender, kdcHost, msgId, msgSize);
-        newMessage.setTtl(this.msgTtl);
-        newMessage.addProperty("subscribedTopic", topicEntry);
-        addToMessages(newMessage, true);
+        newMessage.addProperty(MESSAGE_SUBSCRIBE_S, topicEntry);
+        addToMessages(newMessage, false);
 //        System.out.println("✅ Successfully added subscription message to KDC buffer: " + msgId);
-        return true;
+        return newMessage;
     }
 
 
