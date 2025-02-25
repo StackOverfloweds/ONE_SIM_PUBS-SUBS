@@ -61,9 +61,6 @@ public class DTNHost implements Comparable<DTNHost> {
     private List<Boolean> socialProfileOI;
     private List<TupleDe<Integer, Integer>> numericAtribute; //min max atribute value of int
 
-    // create variable for publsiher
-    private List<Boolean> topicValues;
-    private List<Integer> subTopicValues;
 
 
     static {
@@ -113,27 +110,10 @@ public class DTNHost implements Comparable<DTNHost> {
         }
 
         Random random = new Random();
-        this.topicValues = new ArrayList<>();
-        this.subTopicValues = new ArrayList<>();
 
         this.socialProfile = new ArrayList<>();
         this.socialProfileOI = new ArrayList<>();
         this.numericAtribute = new ArrayList<>();
-
-        if (isPublisher) {
-            int index = 0;
-            while (index < 5) {
-                if (random.nextBoolean()) {
-                    // if true add
-                    topicValues.add(true);
-                    subTopicValues.add(random.nextInt(29) + 1);
-                } else {
-                    topicValues.add(false);
-                    subTopicValues.add(0);
-                }
-                index++;
-            }
-        }
         // ✅ **Initialize subscriber attributes if the entity is a subscriber**
         if (isSubscriber) {
             int index = 0;
@@ -722,25 +702,6 @@ public class DTNHost implements Comparable<DTNHost> {
     }
 
 
-    // ✅ **Retrieve Publisher-related topic information**
-
-    /**
-     * Retrieves the sub-topic value assigned to the entity.
-     *
-     * @return The sub-topic ID as an integer.
-     */
-    public List<Integer> getSubTopic() {
-        return subTopicValues;
-    }
-
-    /**
-     * Retrieves the main topic value assigned to the entity.
-     *
-     * @return A boolean representing whether the entity is assigned a topic.
-     */
-    public List<Boolean> getTopicValue() {
-        return topicValues;
-    }
 
 
 }

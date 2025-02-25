@@ -635,7 +635,6 @@ public class Settings {
             throw new SettingsError("Not a boolean value: '" + stringValue
                     + "' for setting " + name);
         }
-
         return value;
     }
 
