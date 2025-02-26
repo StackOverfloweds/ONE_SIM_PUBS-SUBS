@@ -1,4 +1,4 @@
-package KDC.Subscriber;
+package routing.KDC.Subscriber;
 
 import core.DTNHost;
 

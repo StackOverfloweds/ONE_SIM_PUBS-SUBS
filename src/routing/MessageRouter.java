@@ -468,7 +468,7 @@ public abstract class MessageRouter {
      * @param newMessage If true, message listeners are informed about a new
      * message, if false, nothing is informed.
      */
-    protected void addToMessages(Message m, boolean newMessage) {
+    public void addToMessages(Message m, boolean newMessage) {
         this.messages.put(m.getId(), m);
 
         if (newMessage) {
