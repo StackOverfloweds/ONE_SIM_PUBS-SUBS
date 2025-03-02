@@ -1,13 +1,111 @@
 package routing.KDC.NAKT;
 
+import core.DTNHost;
+import core.Message;
+import core.SimScenario;
 import routing.util.TupleDe;
 import java.util.*;
 
 public class NAKTBuilder extends KeyManager {
+    private Map<DTNHost, TupleDe<String, String>> keyEncryption;
+    private Map<DTNHost, List<TupleDe<String, String>>> keyAuthentication;
+
     private final int lcnum;
     public NAKTBuilder(int lcnum) {
         super(); // Call parent constructor of KeyManager
         this.lcnum = lcnum;
+        this.keyEncryption = new HashMap<>();
+        this.keyAuthentication = new HashMap<>();
+    }
+
+    /**
+     * Builds the NAKT key structure.
+     * - Generates keys for publishers and subscribers.
+     * - Assigns appropriate encryption keys to topics and attributes.
+     *
+     * @param kdcHosts host is the kdc to process the building
+     * @param msg      get msg
+     * @return true if the NAKT key structure is successfully built, false otherwise.
+     */
+    public boolean buildNAKT(List<DTNHost> kdcHosts, Message msg) {
+        boolean success = false;
+
+        for (DTNHost kdcHost : kdcHosts) {
+            if (!kdcHost.isKDC()) continue;
+
+            Map<DTNHost, List<TupleDe<Boolean, Integer>>> registerData =
+                    (Map<DTNHost, List<TupleDe<Boolean, Integer>>>) msg.getProperty("KDC_Register_");
+            Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> getUnSubs =
+                    (Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>>) msg.getProperty("KDC_Subscribe_");
+
+            if (registerData == null || registerData.isEmpty() || getUnSubs == null || getUnSubs.isEmpty()) {
+                continue;
+            }
+
+            for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : registerData.entrySet()) {
+                DTNHost subscriber = entry.getKey();
+                List<TupleDe<Boolean, Integer>> subscriberInfo = entry.getValue();
+                if (subscriberInfo == null || subscriberInfo.isEmpty()) continue;
+
+                TupleDe<Boolean, Integer> firstEntry = subscriberInfo.get(0);
+                int attributeValue = firstEntry.getSecond();
+                boolean topicVal = firstEntry.getFirst();
+
+                if (!keyEncryption.containsKey(subscriber)) {
+                    String rootKey = generateRootKey(topicVal);
+                    List<TupleDe<String, String>> keyList = new ArrayList<>();
+                    encryptTreeNodes(0, getNearestPowerOfTwo(attributeValue) - 1, rootKey, "", 1, keyList);
+
+                    String binaryPathPubs = Integer.toBinaryString(attributeValue);
+                    TupleDe<String, String> selectedKey = keyList.stream()
+                            .filter(tuple -> tuple.getFirst().equals(binaryPathPubs))
+                            .findFirst()
+                            .orElse(null);
+
+                    if (selectedKey != null) {
+                        keyEncryption.put(subscriber, selectedKey);
+                        msg.addProperty("KDC_Key_Encryption_", keyEncryption);
+                    }
+                }
+
+                if (!keyAuthentication.containsKey(subscriber)) {
+                    List<TupleDe<String, String>> derivedKeys = new ArrayList<>();
+                    List<TupleDe<Integer, Integer>> existingAttributes = new ArrayList<>();
+
+                    List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> unsubData = getUnSubs.get(subscriber);
+                    if (unsubData != null) {
+                        for (TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> unsubEntry : unsubData) {
+                            existingAttributes.addAll(unsubEntry.getSecond());
+                        }
+                    }
+
+                    if (!existingAttributes.isEmpty()) {
+                        String rootKey = generateRootKey(topicVal);
+                        List<TupleDe<String, String>> keyList = new ArrayList<>();
+                        encryptTreeNodes(0, getNearestPowerOfTwo(attributeValue) - 1, rootKey, "", 1, keyList);
+
+                        for (TupleDe<Integer, Integer> range : existingAttributes) {
+                            for (int i = range.getFirst(); i <= range.getSecond(); i++) {
+                                String binaryPathSubs = Integer.toBinaryString(i);
+                                for (TupleDe<String, String> keyTuple : keyList) {
+                                    if (binaryPathSubs.startsWith(keyTuple.getFirst()) && !derivedKeys.contains(keyTuple)) {
+                                        derivedKeys.add(keyTuple);
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!derivedKeys.isEmpty()) {
+                            keyAuthentication.put(subscriber, derivedKeys);
+                            msg.addProperty("KDC_Key_Authentication_", keyAuthentication);
+                        }
+                    }
+                }
+            }
+
+            success = true;
+        }
+        return success;
     }
 
     /**

@@ -71,7 +71,7 @@ public class PublishSubsReport extends Report implements MessageListener, Update
 
         this.nrofRelayed++;
         if (finalTarget) {
-            this.latencies.add(getSimTime() - this.creationTimes.get(m.getId()));
+//            this.latencies.add(getSimTime() - this.creationTimes.get(m.getId()));
             this.nrofDelivered++;
             this.hopCounts.add(m.getHops().size() - 1);
 

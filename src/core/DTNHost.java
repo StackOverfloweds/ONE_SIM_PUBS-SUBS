@@ -6,6 +6,7 @@ package core;
 
 import java.util.*;
 
+import input.MessageCreateEventNAKT;
 import movement.MovementModel;
 import movement.Path;
 import routing.MessageRouter;
@@ -151,7 +152,6 @@ public class DTNHost implements Comparable<DTNHost> {
         this.movement = mmProto.replicate();
         this.movement.setComBus(comBus);
         setRouter(mRouterProto.replicate());
-
         this.location = movement.getInitialLocation();
 
         this.nextTimeToMove = movement.nextPathAvailable();

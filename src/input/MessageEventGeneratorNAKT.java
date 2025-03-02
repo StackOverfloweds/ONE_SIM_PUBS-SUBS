@@ -87,6 +87,7 @@ public class MessageEventGeneratorNAKT implements EventQueue {
      */
     protected Random rng;
 
+
     /**
      * Constructor, initializes the interval between events,
      * and the size of messages generated, as well as number
@@ -99,7 +100,8 @@ public class MessageEventGeneratorNAKT implements EventQueue {
         this.sizeRange = s.getCsvInts(MESSAGE_SIZE_S);
         this.msgInterval = s.getCsvInts(MESSAGE_INTERVAL_S);
         this.hostRange = s.getCsvInts(HOST_RANGE_S, 2);
-        this.idPrefix = "M" + UUID.randomUUID().toString().substring(0, 3);
+        this.idPrefix = s.getSetting(MESSAGE_ID_PREFIX_S);
+
 
         if (s.contains(MESSAGE_TIME_S)) {
             this.msgTime = s.getCsvDoubles(MESSAGE_TIME_S, 2);
@@ -126,7 +128,11 @@ public class MessageEventGeneratorNAKT implements EventQueue {
         }
         s.assertValidRange(this.hostRange, HOST_RANGE_S);
 
-        this.nextEventsTime = (this.msgTime != null ? this.msgTime[0] : 0) + msgInterval[0];
+        /* calculate the first event's time */
+        this.nextEventsTime = (this.msgTime != null ? this.msgTime[0] : 0)
+                + msgInterval[0] +
+                (msgInterval[0] == msgInterval[1] ? 0 :
+                        rng.nextInt(msgInterval[1] - msgInterval[0]));
 
     }
 
@@ -157,17 +163,25 @@ public class MessageEventGeneratorNAKT implements EventQueue {
      * @return the time difference
      */
     protected int drawNextEventTimeDiff() {
-        return msgInterval[0] + rng.nextInt(msgInterval[1] - msgInterval[0] + 1);
+        int timeDiff = msgInterval[0] == msgInterval[1] ? 0 :
+                rng.nextInt(msgInterval[1] - msgInterval[0]);
+        return msgInterval[0] + timeDiff;
     }
 
-
-
-
+    /**
+     * Draws a destination host address that is different from the "from"
+     * address
+     * @param hostRange The range of hosts
+     * @param from the "from" address
+     * @return a destination address from the range, but different from "from"
+     */
     protected int drawToAddress(int hostRange[], int from) {
         int to;
         do {
-            to = (this.toHostRange != null) ? drawHostAddress(this.toHostRange) : drawHostAddress(this.hostRange);
-        } while (from == to);
+            to = this.toHostRange != null ? drawHostAddress(this.toHostRange):
+                    drawHostAddress(this.hostRange);
+        } while (from==to);
+
         return to;
     }
 
@@ -181,6 +195,7 @@ public class MessageEventGeneratorNAKT implements EventQueue {
         int interval;
         int from;
         int to;
+        int lcnum = 4; // set default for 4
 
         /* Get two *different* nodes randomly from the host ranges */
         from = drawHostAddress(this.hostRange);
@@ -191,7 +206,7 @@ public class MessageEventGeneratorNAKT implements EventQueue {
 
         /* Create event and advance to next event */
         MessageCreateEventNAKT mce = new MessageCreateEventNAKT(from, to, this.getID(),
-                msgSize, responseSize, this.nextEventsTime);
+                msgSize, responseSize, this.nextEventsTime, lcnum);
         this.nextEventsTime += interval;
 
         if (this.msgTime != null && this.nextEventsTime > this.msgTime[1]) {

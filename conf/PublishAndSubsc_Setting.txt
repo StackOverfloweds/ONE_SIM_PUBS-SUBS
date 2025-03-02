@@ -2,7 +2,7 @@
 Scenario.name = PUBS_SUBS
 Scenario.simulateConnections = true
 Scenario.updateInterval = 0.1
-Scenario.endTime = 86400
+Scenario.endTime = 43200
 
 # Interface-specific settings
 btInterface.type = SimpleBroadcastInterface
@@ -71,7 +71,7 @@ Group4.nrofHosts = 1
 # Pojok Kanan Atas
 Group5.groupID = K
 Group5.movementModel = StationaryMovement
-Group5.nodeLocation = 100,0
+Group5.nodeLocation = 300,0
 Group5.bufferSize = 1024M
 Group5.router = PublishAndSubscriberRouting
 Group5.nrofHosts = 1
@@ -79,7 +79,7 @@ Group5.nrofHosts = 1
 # Pojok Kiri Bawah
 Group6.groupID = K
 Group6.movementModel = StationaryMovement
-Group6.nodeLocation = 0,100
+Group6.nodeLocation = 0,300
 Group6.bufferSize = 1024M
 Group6.router = PublishAndSubscriberRouting
 Group6.nrofHosts = 1
@@ -87,7 +87,7 @@ Group6.nrofHosts = 1
 # Pojok Kanan Bawah
 Group7.groupID = K
 Group7.movementModel = StationaryMovement
-Group7.nodeLocation = 100,100
+Group7.nodeLocation = 300,300
 Group7.bufferSize = 1024M
 Group7.router = PublishAndSubscriberRouting
 Group7.nrofHosts = 1
@@ -95,7 +95,7 @@ Group7.nrofHosts = 1
 # Tengah Kiri
 Group8.groupID = K
 Group8.movementModel = StationaryMovement
-Group8.nodeLocation = 0,50
+Group8.nodeLocation = 0,150
 Group8.bufferSize = 1024M
 Group8.router = PublishAndSubscriberRouting
 Group8.nrofHosts = 1
@@ -103,7 +103,7 @@ Group8.nrofHosts = 1
 # Tengah Kanan
 Group9.groupID = K
 Group9.movementModel = StationaryMovement
-Group9.nodeLocation = 100,50
+Group9.nodeLocation = 300,150
 Group9.bufferSize = 1024M
 Group9.router = PublishAndSubscriberRouting
 Group9.nrofHosts = 1
@@ -113,7 +113,7 @@ Group9.nrofHosts = 1
 # How many event generators
 Events.nrof = 1
 # Class of the first event generator
-Events1.class = MessageEventGenerator
+Events1.class = MessageEventGeneratorNAKT
 # (following settings are specific for the MessageEventGenerator class)
 # Creation interval in seconds (one new message every 25 to 35 seconds)
 Events1.interval = 25,35
@@ -125,8 +125,8 @@ Events1.hosts = 0,97
 Events1.prefix = M
 
 # Movement model settings
-MovementModel.rngSeed = 1
-MovementModel.worldSize = 100, 100
+MovementModel.rngSeed = 3
+MovementModel.worldSize = 300, 300
 MovementModel.warmup = 1000
 
 

@@ -7,6 +7,7 @@
 package routing;
 
 import core.*;
+import routing.KDC.Publisher.EncryptionUtil;
 import routing.util.TupleDe;
 
 import java.util.*;
@@ -84,93 +85,108 @@ public class PublishAndSubscriberRouting extends CCDTN {
      */
     @Override
     public boolean createNewMessage(Message msg) {
-        super.createNewMessage(msg);
-        // Buat daftar sub-topik
-        List<TupleDe<Boolean, Integer>> setSubTopic = new ArrayList<>();
-        Map<DTNHost, List<TupleDe<Boolean, Integer>>> setTop = new HashMap<>();
+        // Ambil properti pesan
+        Map<DTNHost, TupleDe<String, String>> getKeyEnc =
+                (Map<DTNHost, TupleDe<String, String>>) msg.getProperty(MESSAGE_KEY_ENCRYPTION_S);
 
-        Random rand = new Random();
+        Map<DTNHost, List<TupleDe<Boolean, Integer>>> getTopPubs =
+                (Map<DTNHost, List<TupleDe<Boolean, Integer>>>) msg.getProperty(MESSAGE_REGISTER_S);
 
-        if (getHost().isPublisher()) { // Pastikan hanya publisher yang menjalankan ini
-            for (int i = 0; i < 5; i++) { // Loop untuk 5 topik
-                boolean topicValue = rand.nextBoolean();
-                int subTopicValue = rand.nextInt(29) + 1;
-
-                // Tambahkan tuple ke daftar
-                setSubTopic.add(new TupleDe<>(topicValue, subTopicValue));
-            }
-            // Tambahkan daftar ke map dengan host sebagai key
-            setTop.put(getHost(), new ArrayList<>(setSubTopic));
-        }
-
-        // Tambahkan data topik ke dalam pesan
-        msg.addProperty(MESSAGE_GET_REGISTER_S, setTop);
-        return sendMsgForRegistration(getHost(), msg);
-    }
-
-
-    private boolean sendMsgForRegistration(DTNHost host, Message msg) {
-        // Ambil semua koneksi
-        Collection<Connection> connections = getConnections();
-        if (connections == null) {
+        // Validasi data
+        if (getKeyEnc == null || getKeyEnc.isEmpty() || getTopPubs == null || getTopPubs.isEmpty()) {
             return false;
         }
 
+        boolean success = false;
+
+        for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entryTop : getTopPubs.entrySet()) {
+            DTNHost pubsId = entryTop.getKey();
+            List<TupleDe<Boolean, Integer>> values = entryTop.getValue();
+
+            // 🛑 Cek apakah list values kosong
+            if (values == null || values.isEmpty()) {
+                continue;
+            }
+
+            TupleDe<Boolean, Integer> topPub = values.get(0); // topic sub-topic publisher
+
+            // Ambil langsung sebagai TupleDe
+            TupleDe<String, String> keyPub = getKeyEnc.get(pubsId);
+
+            if (keyPub == null) {
+                continue;
+            }
+
+//            System.out.println("pub id : " + pubsId);
+
+            // Generate random message
+            String randomMessage = "abcdefghijABCDEFGHIJ"; // 20 karakter
+            String hashedMessage = EncryptionUtil.encryptMessage(randomMessage, keyPub.getSecond());
+
+            Map<Boolean, TupleDe<Integer, String>> messageData = new HashMap<>();
+            messageData.put(topPub.getFirst(), new TupleDe<>(topPub.getSecond(), hashedMessage));
+
+//            System.out.println("get msg before encryption: " + randomMessage);
+//            System.out.println("get key encryption: " + keyPub.getSecond());
+//            System.out.println("get msg after encryption: " + hashedMessage);
+
+            makeRoomForMessage(msg.getSize());
+            msg.setTtl(this.msgTtl);
+            msg.addProperty(MESSAGE_TOPICS_S, messageData);
+            addToMessages(msg, true); // new msg add to buffer
+            if (sendForPublishing(msg)) {
+                System.out.println("success create msg with encrypt" + msg.getProperty(MESSAGE_TOPICS_S));
+                success = true;
+            }
+        }
+
+        return success;
+    }
+
+
+    private boolean sendForPublishing(Message msg) {
+        // Get all connections
+        Collection<Connection> connections = getConnections();
+        if (connections == null) {
+            System.err.println("Error: getConnections() is null!");
+            return false;
+        }
+
+        // Get the host
+        DTNHost host = getHost();
+        if (host == null) {
+            System.err.println("Error: getHost() is null!");
+            return false;
+        }
         List<DTNHost> brokerHosts = getAllBrokers();
 
-        // Kumpulkan semua broker yang terhubung
+        // Iterate through all connections
         for (Connection con : connections) {
             DTNHost other = con.getOtherNode(host);
             PublishAndSubscriberRouting othRouter = (PublishAndSubscriberRouting) other.getRouter();
-
             if (othRouter.isTransferring()) {
-                continue; // Jika sedang mentransfer, lewati
+                continue;
             }
 
             if (other.isBroker()) {
                 brokerHosts.add(other);
             }
+
         }
 
         // Jika tidak ada broker, hentikan proses
         if (brokerHosts.isEmpty()) {
             return false;
         }
-
         // Kirim pesan ke semua broker
         for (DTNHost broker : brokerHosts) {
-            addToMessages(msg, false);
-        }
-
-        // Kumpulkan semua host yang merupakan KDC
-        List<DTNHost> kdcHosts = new ArrayList<>();
-        for (DTNHost otherHost : SimScenario.getInstance().getHosts()) {
-            if (otherHost.isKDC() && otherHost.getRouter() instanceof PublishAndSubscriberRouting) {
-                kdcHosts.add(otherHost);
+            if (broker.isBroker()) {
+                addToMessages(msg, false); // send to broker for msg from publisher
             }
         }
-
-        // Kirim pesan dari broker ke semua KDC
-        if (!kdcHosts.isEmpty()) {
-            for (DTNHost broker : brokerHosts) {
-                for (DTNHost kdc : kdcHosts) {
-                    Map<DTNHost, List<TupleDe<Boolean, Integer>>> registerData =
-                            (Map<DTNHost, List<TupleDe<Boolean, Integer>>>) msg.getProperty(MESSAGE_GET_REGISTER_S);
-
-                    if (registerData != null) {
-                        msg.addProperty(MESSAGE_REGISTER_S, registerData); // Tandai bahwa msg sudah register
-                    }
-
-                    addToMessages(msg, false);
-//                    System.out.println("Pesan register dikirim dari broker " + broker + " ke KDC: " + kdc);
-                }
-            }
-        } else {
-            return false;
-        }
-
         return true;
     }
+
 
     /**
      * Comparator for sorting messages based on the highest interest similarity.
@@ -219,65 +235,8 @@ public class PublishAndSubscriberRouting extends CCDTN {
             return; // Jika berhasil transfer, hentikan proses selanjutnya
         }
 
-        // Coba transfer ke node lain
         tryOtherMessages();
-        processAndForwardMessages();
 
-        // catat per interval waktu untuk msg yang sudah di buat
-        if ((SimClock.getTime() - lastUpdateTime) >= updateInterval) {
-            lastUpdateTime = SimClock.getTime();
-
-            // Get the message collection
-            Collection<Message> msgCollection = getMessageCollection();
-            if (msgCollection.isEmpty()) {
-                return;
-            }
-            Iterator<Message> msgIterator = new ArrayList<>(msgCollection).iterator();
-            while (msgIterator.hasNext()) {
-                Message msg = msgIterator.next();
-                if (msg == null) {
-                    continue;
-                }
-                messageRegistry.addMessage(msg);
-//                    System.out.println("get property " + msg.getProperty(MESSAGE_KEY_ENCRYPTION_S));
-            }
-
-
-        }
-    }
-
-    private void processAndForwardMessages() {
-        Collection<Message> msgCollection = getMessageCollection();
-        if (msgCollection.isEmpty()) {
-            return;
-        }
-
-        // Get all connections
-        Collection<Connection> connections = getConnections();
-        if (connections == null) {
-            return;
-        }
-        List<DTNHost> getAllKDC = getAllKDCs();
-
-        for (Connection con : connections) {
-            DTNHost other = con.getOtherNode(getHost());
-            PublishAndSubscriberRouting othRouter = (PublishAndSubscriberRouting) other.getRouter();
-            if (othRouter.isTransferring()) {
-                continue;
-            }
-
-            Iterator<Message> msgIterator = new ArrayList<>(msgCollection).iterator();
-            while (msgIterator.hasNext()) {
-                Message msg = msgIterator.next();
-                if (msg == null) {
-                    continue;
-                }
-                sendMsgToBrokerForSubs(other, msg);
-                brokerSendToKDCForSubs(msg);
-                buildNAKT(getAllKDC, msg);
-            }
-
-        }
     }
 
 
@@ -309,7 +268,6 @@ public class PublishAndSubscriberRouting extends CCDTN {
         if (msgCollection.isEmpty()) {
             return null;
         }
-        List<DTNHost> getAllKDC = getAllKDCs();
 
         // Iterate through all connections
         for (Connection con : connections) {
@@ -321,6 +279,9 @@ public class PublishAndSubscriberRouting extends CCDTN {
 
             // Iterate through the message collection
             for (Message msg : msgCollection) {
+                if (msg == null) {
+                    continue;
+                }
 
                 if (othRouter.hasMessage(msg.getId())) {
                     continue; // skip messages that the other one has
@@ -344,251 +305,6 @@ public class PublishAndSubscriberRouting extends CCDTN {
 
         // Try to transfer the messages
         return tryMessagesForConnected(messages);
-    }
-
-    private boolean sendMsgToBrokerForSubs(DTNHost other, Message msg) {
-        // Get all connections
-        Collection<Connection> connections = getConnections();
-        if (connections == null) {
-            return false;
-        }
-
-        List<Boolean> topicNode = other.getSocialProfileOI();
-        List<TupleDe<Integer, Integer>> getSubTopic = other.getNumericAtribute();
-
-        if (topicNode == null || getSubTopic == null || getSubTopic.isEmpty()) {
-            return false;
-        }
-
-        // Buat TupleDe yang berisi topicNode dan getSubTopic
-        TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> tupleData =
-                new TupleDe<>(topicNode, getSubTopic);
-
-        // Masukkan ke dalam Map dengan host sebagai key
-        Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> hostDataMap = new HashMap<>();
-        hostDataMap.put(other, Collections.singletonList(tupleData));
-
-        // Tambahkan data ke pesan
-        msg.addProperty(MESSAGE_GET_SUBSCRIBE_S, hostDataMap);
-        // if its true
-        if (sendToBrokerBuffer(other, msg)) {
-            return true;
-        }
-
-        return false;
-    }
-
-
-    private boolean sendToBrokerBuffer(DTNHost other, Message msg) {
-        Collection<Connection> connections = getConnections();
-        if (connections == null) {
-            System.err.println("Error: getConnections() is null!");
-            return false;
-        }
-
-        for (Connection con : connections) {
-            DTNHost others = con.getOtherNode(other);
-            PublishAndSubscriberRouting othRouter =
-                    (others.getRouter() instanceof PublishAndSubscriberRouting) ?
-                            (PublishAndSubscriberRouting) others.getRouter() : null;
-
-            if (othRouter == null || othRouter.isTransferring()) {
-                continue; // Jika tidak valid atau sedang mentransfer, lewati
-            }
-
-            if (others.isBroker()) {
-                addToMessages(msg, false); // Tambahkan pesan ke broker
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * @param msg
-     * @return
-     */
-    private boolean brokerSendToKDCForSubs(Message msg) {
-        Map<DTNHost, List<TupleDe<Boolean, Integer>>> registerData =
-                (Map<DTNHost, List<TupleDe<Boolean, Integer>>>) msg.getProperty(MESSAGE_REGISTER_S);
-        Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> getUnSubs =
-                (Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>>) msg.getProperty(MESSAGE_GET_SUBSCRIBE_S);
-
-        if (registerData == null || registerData.isEmpty() || getUnSubs == null || getUnSubs.isEmpty()) {
-            return false;
-        }
-
-        List<Boolean> regisBooleanList = new ArrayList<>();
-        List<Boolean> subBooleanList = new ArrayList<>();
-
-        // Mengambil semua nilai boolean dari registerData
-        for (List<TupleDe<Boolean, Integer>> tuples : registerData.values()) {
-            for (TupleDe<Boolean, Integer> tuple : tuples) {
-                regisBooleanList.add(tuple.getFirst());
-            }
-        }
-
-        // Mengambil semua nilai boolean dari getUnSubs
-        for (List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> tuples : getUnSubs.values()) {
-            for (TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> tuple : tuples) {
-                subBooleanList.addAll(tuple.getFirst());
-            }
-        }
-
-        for (Boolean top : regisBooleanList) {
-            if (subBooleanList.contains(top)) {
-                // Mencari semua host yang merupakan KDC
-                List<DTNHost> kdcHosts = new ArrayList<>();
-                for (DTNHost otherHost : SimScenario.getInstance().getHosts()) {
-                    if (otherHost.isKDC() && otherHost.getRouter() instanceof PublishAndSubscriberRouting) {
-                        kdcHosts.add(otherHost);
-                    }
-                }
-
-                // Jika ada KDC, kirim pesan ke semua KDC
-                if (!kdcHosts.isEmpty()) {
-                    for (DTNHost kdc : kdcHosts) {
-                        if (getUnSubs != null) {
-                            msg.addProperty(MESSAGE_SUBSCRIBE_S, getUnSubs);
-                        }
-                        addToMessages(msg, false);
-                    }
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Builds the NAKT key structure.
-     * - Generates keys for publishers and subscribers.
-     * - Assigns appropriate encryption keys to topics and attributes.
-     *
-     * @param kdcHosts host is the kdc to process the building
-     * @param msg      get msg
-     * @return true if the NAKT key structure is successfully built, false otherwise.
-     */
-    public boolean buildNAKT(List<DTNHost> kdcHosts, Message msg) {
-        boolean success = false;
-
-        for (DTNHost kdcHost : kdcHosts) {
-            if (!kdcHost.isKDC()) continue;
-
-            Map<DTNHost, List<TupleDe<Boolean, Integer>>> registerData =
-                    (Map<DTNHost, List<TupleDe<Boolean, Integer>>>) msg.getProperty(MESSAGE_REGISTER_S);
-            Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> getUnSubs =
-                    (Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>>) msg.getProperty(MESSAGE_SUBSCRIBE_S);
-
-            if (registerData == null || registerData.isEmpty() || getUnSubs == null || getUnSubs.isEmpty()) {
-                continue;
-            }
-
-            for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : registerData.entrySet()) {
-                DTNHost subscriber = entry.getKey();
-                List<TupleDe<Boolean, Integer>> subscriberInfo = entry.getValue();
-                if (subscriberInfo == null || subscriberInfo.isEmpty()) continue;
-
-                TupleDe<Boolean, Integer> firstEntry = subscriberInfo.get(0);
-                int attributeValue = firstEntry.getSecond();
-                boolean topicVal = firstEntry.getFirst();
-
-                if (!keyEncryption.containsKey(subscriber)) {
-                    String rootKey = keyManager.generateRootKey(topicVal);
-                    List<TupleDe<String, String>> keyList = new ArrayList<>();
-                    naktBuilder.encryptTreeNodes(0, naktBuilder.getNearestPowerOfTwo(attributeValue) - 1, rootKey, "", 1, keyList);
-
-                    String binaryPathPubs = Integer.toBinaryString(attributeValue);
-                    TupleDe<String, String> selectedKey = keyList.stream()
-                            .filter(tuple -> tuple.getFirst().equals(binaryPathPubs))
-                            .findFirst()
-                            .orElse(null);
-
-                    if (selectedKey != null) {
-                        keyEncryption.put(subscriber, selectedKey);
-                    }
-                }
-
-                if (!keyAuthentication.containsKey(subscriber)) {
-                    List<TupleDe<String, String>> derivedKeys = new ArrayList<>();
-                    List<TupleDe<Integer, Integer>> existingAttributes = new ArrayList<>();
-
-                    List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> unsubData = getUnSubs.get(subscriber);
-                    if (unsubData != null) {
-                        for (TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> unsubEntry : unsubData) {
-                            existingAttributes.addAll(unsubEntry.getSecond());
-                        }
-                    }
-
-                    if (!existingAttributes.isEmpty()) {
-                        String rootKey = keyManager.generateRootKey(topicVal);
-                        List<TupleDe<String, String>> keyList = new ArrayList<>();
-                        naktBuilder.encryptTreeNodes(0, naktBuilder.getNearestPowerOfTwo(attributeValue) - 1, rootKey, "", 1, keyList);
-
-                        for (TupleDe<Integer, Integer> range : existingAttributes) {
-                            for (int i = range.getFirst(); i <= range.getSecond(); i++) {
-                                String binaryPathSubs = Integer.toBinaryString(i);
-                                for (TupleDe<String, String> keyTuple : keyList) {
-                                    if (binaryPathSubs.startsWith(keyTuple.getFirst()) && !derivedKeys.contains(keyTuple)) {
-                                        derivedKeys.add(keyTuple);
-                                    }
-                                }
-                            }
-                        }
-
-                        if (!derivedKeys.isEmpty()) {
-                            keyAuthentication.put(subscriber, derivedKeys);
-                        }
-                    }
-                }
-            }
-
-            List<DTNHost> brokerList = new ArrayList<>();
-            for (DTNHost host : SimScenario.getInstance().getHosts()) {
-                if (host.isBroker()) brokerList.add(host);
-            }
-
-            // Kirim ke semua broker terlebih dahulu
-            for (DTNHost broker : brokerList) {
-                if (broker.isBroker()) {
-                    addToMessages(msg, false);
-                }
-
-                List<DTNHost> getAllPubs = getAllPublisher();
-                for (DTNHost pub : getAllPubs) {
-                    // Broker meneruskan ke publisher dan subscriber
-                    for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : registerData.entrySet()) {
-                        DTNHost PublisherKey = entry.getKey();
-                        if (pub.equals(PublisherKey)) {
-//                            System.out.println("publisher have the key: " + PublisherKey);
-                            if (keyEncryption != null) {
-                                msg.addProperty(MESSAGE_KEY_ENCRYPTION_S, keyEncryption);
-                            }
-                            addToMessages(msg, false); // Menggunakan flag true untuk identifikasi routing via broker
-
-                        }
-                    }
-                }
-                List<DTNHost> getAllSubs = getAllSubscriber();
-                for (DTNHost sub : getAllSubs) {
-                    for (Map.Entry<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> entrySubscriber : getUnSubs.entrySet()) {
-                        DTNHost SubscriberHost = entrySubscriber.getKey();
-                        if (sub.equals(SubscriberHost)) {
-//                            System.out.println("subscriber have the key: " + SubscriberHost);
-                            if (keyAuthentication != null) {
-                                msg.addProperty(MESSAGE_KEY_AUTHENTICATION_S, keyAuthentication);
-                            }
-                            addToMessages(msg, false);
-                        }
-                    }
-                }
-            }
-            success = true;
-        }
-        if (success) {
-            return super.createNewMessage(msg);
-        }
-        return false;
     }
 
 

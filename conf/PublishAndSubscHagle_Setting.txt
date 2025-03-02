@@ -4,7 +4,7 @@ Scenario.simulateConnections = false
 Scenario.updateInterval = 0.1
 # 43200s == 12h
 #Scenario.endTime = 43200
-Scenario.endTime = 16981816
+Scenario.endTime = 274883
 
 # 16981816 Reality 8490908
 # 274883 Haggle 3 Infocom 5
@@ -136,7 +136,7 @@ Events1.filePath = ./conf/RealityConnectionTraceFinal.txt
 # Haggle3-Infocom5.csv
 # RealityConnectionTraceFinal.txt
 
-Events2.class = MessageEventGenerator
+Events2.class = MessageEventGeneratorNAKT
 # change interval to have more or less messages, see javadocs for more information.
 
 Events2.interval = 1160, 1240
