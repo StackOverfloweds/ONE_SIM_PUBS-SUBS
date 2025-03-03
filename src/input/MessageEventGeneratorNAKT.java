@@ -50,6 +50,13 @@ public class MessageEventGeneratorNAKT implements EventQueue {
     public static final String MESSAGE_TIME_S = "time";
 
     /**
+     * LCNUM for the NAKT building parameter
+     *
+     */
+    private static final String LCNUM = "lcnum";
+
+
+    /**
      * Time of the next event (simulated seconds)
      */
     protected double nextEventsTime = 0;
@@ -87,6 +94,8 @@ public class MessageEventGeneratorNAKT implements EventQueue {
      */
     protected Random rng;
 
+    private int lcnum;
+
 
     /**
      * Constructor, initializes the interval between events,
@@ -101,7 +110,7 @@ public class MessageEventGeneratorNAKT implements EventQueue {
         this.msgInterval = s.getCsvInts(MESSAGE_INTERVAL_S);
         this.hostRange = s.getCsvInts(HOST_RANGE_S, 2);
         this.idPrefix = s.getSetting(MESSAGE_ID_PREFIX_S);
-
+        this.lcnum = s.getInt(LCNUM);
 
         if (s.contains(MESSAGE_TIME_S)) {
             this.msgTime = s.getCsvDoubles(MESSAGE_TIME_S, 2);
@@ -195,7 +204,6 @@ public class MessageEventGeneratorNAKT implements EventQueue {
         int interval;
         int from;
         int to;
-        int lcnum = 4; // set default for 4
 
         /* Get two *different* nodes randomly from the host ranges */
         from = drawHostAddress(this.hostRange);

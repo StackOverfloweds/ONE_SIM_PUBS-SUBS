@@ -43,6 +43,6 @@ public class DecryptUtil {
         }
 
         //
-        return (lastAttempt != null) ? lastAttempt : new TupleDe<>("❌", "ERROR: No Key Valid!");
+        return (lastAttempt != null) ? lastAttempt : new TupleDe<>("", "");
     }
 }

@@ -48,7 +48,7 @@ public class MessageCreateEventNAKT extends MessageEvent {
         boolean registrationData = sendMsgForRegistration(from, m);
         boolean eventCreated = false;
         if (registrationData) {
-            boolean subscribeData = sendMsgForSubscribe(m, from, to);
+            boolean subscribeData = sendMsgForSubscribe(m, to);
             if (subscribeData) {
                 eventCreated = true;
             }
@@ -59,7 +59,7 @@ public class MessageCreateEventNAKT extends MessageEvent {
         from.createNewMessage(m);
     }
 
-    private boolean sendMsgForSubscribe(Message m, DTNHost from, DTNHost other) {
+    private boolean sendMsgForSubscribe(Message m, DTNHost other) {
         // Retrieve registered topics and store them in a dummy variable
         Map<DTNHost, List<TupleDe<Boolean, Integer>>> getRegisteredTopic =
                 (Map<DTNHost, List<TupleDe<Boolean, Integer>>>) m.getProperty("KDC_Register_");
@@ -89,7 +89,7 @@ public class MessageCreateEventNAKT extends MessageEvent {
         for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : dummyTopic.entrySet()) {
             for (TupleDe<Boolean, Integer> tuple : entry.getValue()) {
                 if (topicNodeSet.contains(tuple.getFirst())) { // Optimasi lookup
-                    hostDataMap.put(from, Collections.singletonList(tupleData));
+                    hostDataMap.put(other, Collections.singletonList(tupleData));
                     break;
                 }
             }
@@ -113,34 +113,16 @@ public class MessageCreateEventNAKT extends MessageEvent {
         Map<DTNHost, List<TupleDe<Boolean, Integer>>> setTop = new HashMap<>();
         Random rand = new Random();
 
-        // Cek apakah publisher sudah memiliki history, jika tidak, buat baru
-        Set<TupleDe<Boolean, Integer>> existingTopics;
-        if (publisherHistory.containsKey(from)) {
-            existingTopics = publisherHistory.get(from);
-        } else {
-            existingTopics = new HashSet<>();
-            publisherHistory.put(from, existingTopics);
-        }
-
-        while (uniqueTopics.size() < 5) { // Hanya menambahkan 5 nilai unik
+        int i=0;
+        while (i < 5) { // Hanya menambahkan 5 nilai unik
             boolean topicValue = rand.nextBoolean();
             int subTopicValue = rand.nextInt(29) + 1;
 
             TupleDe<Boolean, Integer> newTopic = new TupleDe<>(topicValue, subTopicValue);
-
-            // Cek apakah topik ini sudah pernah didaftarkan oleh publisher yang sama
-            if (!existingTopics.contains(newTopic) && !uniqueTopics.contains(newTopic)) {
-                uniqueTopics.add(newTopic);
-            }
+            uniqueTopics.add(newTopic);
+            i++;
         }
 
-        // Jika publisher hanya mencoba menambahkan topik yang sudah ada, pembatalan dilakukan
-        if (uniqueTopics.isEmpty()) {
-            return false;
-        }
-
-        // Simpan topik baru ke dalam history
-        existingTopics.addAll(uniqueTopics);
         setTop.put(from, new ArrayList<>(uniqueTopics));
 
         // Get all KDCs

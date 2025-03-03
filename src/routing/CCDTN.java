@@ -150,20 +150,15 @@ public class CCDTN extends ActiveRouter {
      * @return True if the message is at its final destination, false otherwise
      */
     protected boolean isFinalDest(Message m, DTNHost host) {
-        Map<Boolean, TupleDe<Integer, String>> finalDestMap =
-                (Map<Boolean, TupleDe<Integer, String>>) m.getProperty(MESSAGE_TOPICS_S);
-        Map<DTNHost, List<TupleDe<String, String>>> getKeyAuth =
-                (Map<DTNHost, List<TupleDe<String, String>>>) m.getProperty(MESSAGE_KEY_AUTHENTICATION_S);
+        Map<Boolean, TupleDe<Integer, String>> finalDestMap = (Map<Boolean, TupleDe<Integer, String>>) m.getProperty(MESSAGE_TOPICS_S);
 
-        if (finalDestMap == null || finalDestMap.isEmpty() || getKeyAuth == null || getKeyAuth.isEmpty()) {
+
+        if (finalDestMap == null || finalDestMap.isEmpty()) {
             return false;
         }
+
         // create dummy for add msg
         Map<Boolean, TupleDe<Integer, String>> dummyMSGTOP = finalDestMap;
-        Map<DTNHost, List<TupleDe<String, String>>> dummyKEYAUTH =  getKeyAuth;
-//        System.out.println("get host " + host);
-//        System.out.println("get data key : " + dummyKEYAUTH);
-//        System.out.println("get top pubs : " + dummyMSGTOP);
 
         // Get all connections
         Collection<Connection> connections = getConnections();
@@ -179,13 +174,22 @@ public class CCDTN extends ActiveRouter {
                 continue;
             }
             List<Boolean> hostTopicNode = other.getSocialProfileOI();
-            if (hostTopicNode == null ||  hostTopicNode.isEmpty()) {
+            Map<DTNHost, List<TupleDe<String, String>>> getKeyAuth = (Map<DTNHost, List<TupleDe<String, String>>>) m.getProperty(MESSAGE_KEY_AUTHENTICATION_S);
+
+            if (getKeyAuth == null || getKeyAuth.isEmpty()) {
+                return false;
+            }
+
+
+            Map<DTNHost, List<TupleDe<String, String>>> dummyKEYAUTH = getKeyAuth;
+
+            if (hostTopicNode == null || hostTopicNode.isEmpty()) {
                 return false;
             }
             for (Map.Entry<Boolean, TupleDe<Integer, String>> entry : dummyMSGTOP.entrySet()) {
                 if (hostTopicNode.contains(entry.getKey())) {
-                    System.out.println("its matched baybeee");
-                   return authenticateSubscriber(entry.getValue().getSecond(), dummyKEYAUTH);
+//                    System.out.println("its matched baybeee");
+                    return authenticateSubscriber(entry.getValue().getSecond(), dummyKEYAUTH);
                 }
             }
         }
@@ -196,7 +200,7 @@ public class CCDTN extends ActiveRouter {
      * Authenticates a subscriber by attempting to decrypt the received message using available keys.
      *
      * @param msgEncrypt The encrypted message
-     * @param keyAuth   The map containing keys for decryption
+     * @param keyAuth    The map containing keys for decryption
      * @return True if decryption is successful, false otherwise
      */
     private boolean authenticateSubscriber(String msgEncrypt, Map<DTNHost, List<TupleDe<String, String>>> keyAuth) {
@@ -224,14 +228,14 @@ public class CCDTN extends ActiveRouter {
 
                             // Cek apakah subscriber sudah menerima pesan ini sebelumnya
                             if (receivedMessages.get(subscriberId).contains(decryptedMessage)) {
-                                System.out.println("⚠️ DUPLICATE WARNING: Subscriber " + subscriberId + " sudah menerima pesan ini sebelumnya!");
+//                                System.out.println("⚠️ DUPLICATE WARNING: Subscriber " + subscriberId + " sudah menerima pesan ini sebelumnya!");
                                 continue; // Skip pesan yang duplikat
                             }
 
                             // Tambahkan pesan ke daftar yang sudah diterima oleh subscriber ini
                             receivedMessages.get(subscriberId).add(decryptedMessage);
 
-                            System.out.println("🔹 Message: " + decryptedMessage);
+//                            System.out.println("🔹 Message: " + decryptedMessage);
                             return true;
                         }
                     }
@@ -239,7 +243,6 @@ public class CCDTN extends ActiveRouter {
             }
         }
 
-        System.out.println("❌ ERROR: No subscriber successfully decrypted the message!");
         return false;
     }
 
@@ -252,8 +255,7 @@ public class CCDTN extends ActiveRouter {
      * @return True if interests match, false otherwise
      */
     protected boolean isSameInterest(Message m, DTNHost host) {
-        Map<Boolean, TupleDe<Integer, String>> topicMap =
-                (Map<Boolean, TupleDe<Integer, String>>) m.getProperty(MESSAGE_TOPICS_S);
+        Map<Boolean, TupleDe<Integer, String>> topicMap = (Map<Boolean, TupleDe<Integer, String>>) m.getProperty(MESSAGE_TOPICS_S);
 
         List<Boolean> topicNode = host.getSocialProfileOI();
 
@@ -283,8 +285,7 @@ public class CCDTN extends ActiveRouter {
      * @return A list of matching interest weights
      */
     protected List<Double> countInterestTopic(Message m, DTNHost host) {
-        Map<Boolean, TupleDe<Integer, String>> topicMap =
-                (Map<Boolean, TupleDe<Integer, String>>) m.getProperty(MESSAGE_TOPICS_S);
+        Map<Boolean, TupleDe<Integer, String>> topicMap = (Map<Boolean, TupleDe<Integer, String>>) m.getProperty(MESSAGE_TOPICS_S);
 
         if (topicMap == null || topicMap.isEmpty()) {
             return null;
@@ -326,6 +327,7 @@ public class CCDTN extends ActiveRouter {
         this.tryAllMessagesToAllConnections();
 
     }
+
     protected List<DTNHost> getAllBrokers() {
         List<DTNHost> brokerList = new ArrayList<>();
         for (DTNHost host : SimScenario.getInstance().getHosts()) { // Jika ada metode untuk mendapatkan semua host

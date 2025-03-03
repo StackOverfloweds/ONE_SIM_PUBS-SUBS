@@ -8,6 +8,7 @@ package routing;
 
 import core.*;
 import routing.KDC.Publisher.EncryptionUtil;
+import routing.KDC.Subscriber.KeySubscriber;
 import routing.util.TupleDe;
 
 import java.util.*;
@@ -17,27 +18,9 @@ import java.util.*;
  * for Delay-Tolerant Networks (DTNs). It manages secure encryption, subscriber authentication,
  * and message forwarding using Numeric Attribute Key Trees (NAKT).
  */
-public class PublishAndSubscriberRouting extends CCDTN {
+public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber {
     // Namespace settings
     private static final String PUBSROUTING_NS = "PublishAndSubscriberRouting";
-    // Static maps for managing topics, subscriptions, encryption, and authentication keys
-    private Map<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> subscribedTopics;
-    // Key: topic & subscriber ID, Value: list of numeric attributes
-    private Map<DTNHost, List<TupleDe<Boolean, Integer>>> registeredTopics;
-    private Map<DTNHost, List<TupleDe<List<Boolean>, List<Integer>>>> tempTopicsM; //for temp regis
-    // 🔹 Temporary storage for subscribers' interests
-    private Map<DTNHost, List<TupleDe<TupleDe<List<Double>, List<Boolean>>, List<TupleDe<Integer, Integer>>>>> tempSubscribersM;
-    /**
-     * update interval diset dari settings
-     */
-    private double updateInterval;
-
-    /**
-     * nilai update interval atur di settings
-     */
-    private static final String UPDATE_INTERVAL = "updateInterval";
-
-    private double lastUpdateTime = 0;
 
     /**
      * Constructor: Initializes PublishAndSubscriberRouting with settings, topic registration,
@@ -49,13 +32,6 @@ public class PublishAndSubscriberRouting extends CCDTN {
         // Call the superclass constructor to initialize inherited fields
         super(s);
         Settings ccSettings = new Settings(PUBSROUTING_NS);
-        updateInterval = ccSettings.getInt(UPDATE_INTERVAL);
-        this.tempTopicsM = new HashMap<>();
-        this.tempSubscribersM = new HashMap<>();
-        // Initialize registeredTopics with a deep copy if needed
-        this.registeredTopics = new HashMap<>();
-        // Handle subscribedTopics with deep copy logic if it's not null
-        this.subscribedTopics = new HashMap<>();
     }
 
     /**
@@ -66,13 +42,6 @@ public class PublishAndSubscriberRouting extends CCDTN {
     protected PublishAndSubscriberRouting(PublishAndSubscriberRouting r) {
         // Call the superclass copy constructor
         super(r);
-        tempTopicsM = r.tempTopicsM;
-        tempSubscribersM = r.tempSubscribersM;
-        updateInterval = r.updateInterval;
-        // Initialize registeredTopics as a new HashMap if it is null in the original object
-        registeredTopics = new HashMap<>(r.registeredTopics);
-        // Handle subscribedTopics copying
-        subscribedTopics = new HashMap<>(r.subscribedTopics);
     }
 
     /**
@@ -135,7 +104,7 @@ public class PublishAndSubscriberRouting extends CCDTN {
             msg.addProperty(MESSAGE_TOPICS_S, messageData);
             addToMessages(msg, true); // new msg add to buffer
             if (sendForPublishing(msg)) {
-                System.out.println("success create msg with encrypt" + msg.getProperty(MESSAGE_TOPICS_S));
+//                System.out.println("success create msg with encrypt" + msg.getProperty(MESSAGE_TOPICS_S));
                 success = true;
             }
         }
@@ -317,5 +286,61 @@ public class PublishAndSubscriberRouting extends CCDTN {
     public MessageRouter replicate() {
         return new PublishAndSubscriberRouting(this);
     }
+
+    public Map<DTNHost, Integer> getKeys() {
+        // Get all connections
+        Collection<Connection> connections = getConnections();
+        if (connections == null) {
+            return null;
+        }
+
+        // Get the host
+        DTNHost host = getHost();
+        if (host == null) {
+            return null;
+        }
+
+        // Get the message collection
+        Collection<Message> msgCollection = getMessageCollection();
+        if (msgCollection.isEmpty()) {
+            return null;
+        }
+
+        // Map untuk menyimpan jumlah total elemen dalam getKeyAuth untuk setiap host
+        Map<DTNHost, Integer> keyCounts = new HashMap<>();
+
+        for (Connection con : connections) {
+            DTNHost other = con.getOtherNode(host);
+            PublishAndSubscriberRouting othRouter = (PublishAndSubscriberRouting) other.getRouter();
+            if (othRouter.isTransferring()) {
+                continue;
+            }
+
+            for (Message msg : msgCollection) {
+                if (msg == null) {
+                    continue;
+                }
+
+                // Ambil properti getKeyAuth dari message
+                Map<DTNHost, List<TupleDe<String, String>>> getKeyAuth =
+                        (Map<DTNHost, List<TupleDe<String, String>>>) msg.getProperty(MESSAGE_KEY_AUTHENTICATION_S);
+
+                if (getKeyAuth != null) {
+                    for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : getKeyAuth.entrySet()) {
+                        DTNHost dtnHost = entry.getKey();
+                        List<TupleDe<String, String>> tuples = entry.getValue();
+
+                        // Hitung jumlah TupleDe dalam daftar
+                        int count = (tuples != null) ? tuples.size() : 0;
+
+                        // Tambahkan ke dalam map
+                        keyCounts.put(dtnHost, keyCounts.getOrDefault(dtnHost, 0) + count);
+                    }
+                }
+            }
+        }
+        return keyCounts;
+    }
+
 
 }

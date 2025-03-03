@@ -2,7 +2,7 @@
 Scenario.name = PUBS_SUBS
 Scenario.simulateConnections = true
 Scenario.updateInterval = 0.1
-Scenario.endTime = 43200
+Scenario.endTime = 274883
 
 # Interface-specific settings
 btInterface.type = SimpleBroadcastInterface
@@ -21,41 +21,28 @@ Group.nrofHosts = 10
 # Common settings for all groups
 Group.movementModel = RandomWalk
 Group.router = PublishAndSubscriberRouting
-PublishAndSubscriberRouting.updateInterval = 300
-PublishAndSubscriberRouting.LCNUM = 4
 Group.bufferSize = 5M
 Group.waitTime = 0, 120
 Group.nrofInterfaces = 1
 Group.interface1 = btInterface
 Group.speed = 0.5, 1.5
+Group.msgTtl = 360
 
 # Publisher Group (P) - Source of messages
 Group1.groupID = P
 Group1.movementModel = RandomWalk
-Group1.waitTime = 0, 120
-Group1.speed = 0.5, 1.5
-Group1.interface1 = btInterface
-Group1.nrofInterfaces = 1
 Group1.router = PublishAndSubscriberRouting
 Group1.nrofHosts = 34
 
 # Broker Group (B) - Message Forwarding
 Group2.groupID = B
 Group2.movementModel = RandomWalk
-Group2.waitTime = 0, 60
-Group2.speed = 0.5, 1.5
-Group2.interface1 = btInterface
-Group2.nrofInterfaces = 1
 Group2.router = PublishAndSubscriberRouting
 Group2.nrofHosts = 28
 
 # Subscriber Group (S) - Message Consumers
 Group3.groupID = S
 Group3.movementModel = RandomWalk
-Group3.waitTime = 0, 60
-Group3.speed = 0.5, 1.5
-Group3.interface1 = btInterface
-Group3.nrofInterfaces = 1
 Group3.router = PublishAndSubscriberRouting
 Group3.nrofHosts = 35
 
@@ -123,6 +110,8 @@ Events1.size = 500k,1M
 Events1.hosts = 0,97
 # Message ID prefix
 Events1.prefix = M
+# default value for lcnum (least count numeric)
+Events1.lcnum = 4
 
 # Movement model settings
 MovementModel.rngSeed = 3

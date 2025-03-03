@@ -2,8 +2,8 @@ package routing.KDC.NAKT;
 
 import core.DTNHost;
 import core.Message;
-import core.SimScenario;
 import routing.util.TupleDe;
+
 import java.util.*;
 
 public class NAKTBuilder extends KeyManager {
@@ -11,6 +11,7 @@ public class NAKTBuilder extends KeyManager {
     private Map<DTNHost, List<TupleDe<String, String>>> keyAuthentication;
 
     private final int lcnum;
+
     public NAKTBuilder(int lcnum) {
         super(); // Call parent constructor of KeyManager
         this.lcnum = lcnum;
@@ -43,70 +44,102 @@ public class NAKTBuilder extends KeyManager {
             }
 
             for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : registerData.entrySet()) {
-                DTNHost subscriber = entry.getKey();
+                DTNHost publisher = entry.getKey();
                 List<TupleDe<Boolean, Integer>> subscriberInfo = entry.getValue();
                 if (subscriberInfo == null || subscriberInfo.isEmpty()) continue;
 
                 TupleDe<Boolean, Integer> firstEntry = subscriberInfo.get(0);
-                int attributeValue = firstEntry.getSecond();
                 boolean topicVal = firstEntry.getFirst();
 
-                if (!keyEncryption.containsKey(subscriber)) {
-                    String rootKey = generateRootKey(topicVal);
-                    List<TupleDe<String, String>> keyList = new ArrayList<>();
-                    encryptTreeNodes(0, getNearestPowerOfTwo(attributeValue) - 1, rootKey, "", 1, keyList);
+                for (Map.Entry<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> entrySubs : getUnSubs.entrySet()) {
+                    DTNHost subscriber = entrySubs.getKey();
+                    List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> tuplesList = entrySubs.getValue();
 
-                    String binaryPathPubs = Integer.toBinaryString(attributeValue);
-                    TupleDe<String, String> selectedKey = keyList.stream()
-                            .filter(tuple -> tuple.getFirst().equals(binaryPathPubs))
-                            .findFirst()
-                            .orElse(null);
+                    for (TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> tuple : tuplesList) {
+                        List<TupleDe<Integer, Integer>> intPairsList = tuple.getSecond();
 
-                    if (selectedKey != null) {
-                        keyEncryption.put(subscriber, selectedKey);
-                        msg.addProperty("KDC_Key_Encryption_", keyEncryption);
-                    }
-                }
+                        for (TupleDe<Integer, Integer> intPair : intPairsList) {
+                            int firstValue = intPair.getFirst();
+                            int secondValue = intPair.getSecond();
 
-                if (!keyAuthentication.containsKey(subscriber)) {
-                    List<TupleDe<String, String>> derivedKeys = new ArrayList<>();
-                    List<TupleDe<Integer, Integer>> existingAttributes = new ArrayList<>();
+                            // Generate encryption keys for publisher if not already present
+                            if (!keyEncryption.containsKey(publisher)) {
+                                handleEncryption(publisher, topicVal, secondValue, msg);
+                            }
 
-                    List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> unsubData = getUnSubs.get(subscriber);
-                    if (unsubData != null) {
-                        for (TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> unsubEntry : unsubData) {
-                            existingAttributes.addAll(unsubEntry.getSecond());
-                        }
-                    }
-
-                    if (!existingAttributes.isEmpty()) {
-                        String rootKey = generateRootKey(topicVal);
-                        List<TupleDe<String, String>> keyList = new ArrayList<>();
-                        encryptTreeNodes(0, getNearestPowerOfTwo(attributeValue) - 1, rootKey, "", 1, keyList);
-
-                        for (TupleDe<Integer, Integer> range : existingAttributes) {
-                            for (int i = range.getFirst(); i <= range.getSecond(); i++) {
-                                String binaryPathSubs = Integer.toBinaryString(i);
-                                for (TupleDe<String, String> keyTuple : keyList) {
-                                    if (binaryPathSubs.startsWith(keyTuple.getFirst()) && !derivedKeys.contains(keyTuple)) {
-                                        derivedKeys.add(keyTuple);
-                                    }
-                                }
+                            // Generate authentication keys for subscriber if not already present
+                            if (!keyAuthentication.containsKey(subscriber)) {
+                                handleAuthentication(subscriber, topicVal, secondValue, getUnSubs, msg);
                             }
                         }
+                    }
+                }
+            }
+            success = true;
+        }
+        return success;
+    }
 
-                        if (!derivedKeys.isEmpty()) {
-                            keyAuthentication.put(subscriber, derivedKeys);
-                            msg.addProperty("KDC_Key_Authentication_", keyAuthentication);
+    private void handleEncryption(DTNHost publisher, boolean topicVal, int secondValue, Message msg) {
+        String rootKey = generateRootKey(topicVal);
+        List<TupleDe<String, String>> keyList = new ArrayList<>();
+        int maxRange = getNearestPowerOfTwo(secondValue) - 1;
+
+        encryptTreeNodes(0, maxRange, rootKey, "", 1, keyList);
+
+        String binaryPathPubs = Integer.toBinaryString(secondValue);
+        TupleDe<String, String> selectedKey = keyList.stream()
+                .filter(tuple -> tuple.getFirst().equals(binaryPathPubs))
+                .findFirst()
+                .orElse(null);
+
+        if (selectedKey != null) {
+            keyEncryption.put(publisher, selectedKey);
+            msg.addProperty("KDC_Key_Encryption_", keyEncryption);
+        }
+    }
+
+    private void handleAuthentication(DTNHost subscriber, boolean topicVal, int secondValue,
+                                      Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> getUnSubs,
+                                      Message msg) {
+        List<TupleDe<String, String>> derivedKeys = new ArrayList<>();
+        List<TupleDe<Integer, Integer>> existingAttributes = new ArrayList<>();
+
+        // Retrieve existing attributes for subscriber
+        List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> unsubData = getUnSubs.get(subscriber);
+        if (unsubData != null) {
+            for (TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> unsubEntry : unsubData) {
+                existingAttributes.addAll(unsubEntry.getSecond());
+            }
+        }
+
+        if (!existingAttributes.isEmpty()) {
+            String rootKey = generateRootKey(topicVal);
+            List<TupleDe<String, String>> keyList = new ArrayList<>();
+            int maxRange = getNearestPowerOfTwo(secondValue) - 1;
+
+            encryptTreeNodes(0, maxRange, rootKey, "", 1, keyList);
+
+            for (TupleDe<Integer, Integer> range : existingAttributes) {
+                for (int i = range.getFirst(); i <= range.getSecond(); i++) {
+                    String binaryPathSubs = Integer.toBinaryString(i);
+                    for (TupleDe<String, String> keyTuple : keyList) {
+                        if (binaryPathSubs.startsWith(keyTuple.getFirst()) && !derivedKeys.contains(keyTuple)) {
+                            derivedKeys.add(keyTuple);
                         }
                     }
                 }
             }
 
-            success = true;
+            if (!derivedKeys.isEmpty()) {
+                keyAuthentication.put(subscriber, derivedKeys);
+                msg.addProperty("KDC_Key_Authentication_", keyAuthentication);
+            }
         }
-        return success;
     }
+
+
+
 
     /**
      * Finds the nearest power of two that is greater than or equal to the given value.
@@ -147,7 +180,6 @@ public class NAKTBuilder extends KeyManager {
         // 🔹 **Ensure only relevant paths are taken**
         if (leftPath.length() == lcnum) keyList.add(new TupleDe<>(leftPath, leftKey));
         if (rightPath.length() == lcnum) keyList.add(new TupleDe<>(rightPath, rightKey));
-
 
 
 // 🔹 **Logging Debugging**

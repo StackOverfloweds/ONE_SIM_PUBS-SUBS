@@ -2,12 +2,7 @@
 Scenario.name = PUBS_SUBS_Haggle
 Scenario.simulateConnections = false
 Scenario.updateInterval = 0.1
-# 43200s == 12h
-#Scenario.endTime = 43200
 Scenario.endTime = 274883
-
-# 16981816 Reality 8490908
-# 274883 Haggle 3 Infocom 5
 
 # Interface-specific settings
 btInterface.type = SimpleBroadcastInterface
@@ -29,22 +24,14 @@ Group.router = PublishAndSubscriberRouting
 PublishAndSubscriberRouting.updateInterval = 300
 PublishAndSubscriberRouting.LCNUM = 4
 
-Group.bufferSize = 20M
-# 10M Haggle3 - Infocom5
-# 20M Reality
+Group.bufferSize = 10M
 
 Group.waitTime = 0, 120
-# All nodes have the bluetooth interface
 Group.nrofInterfaces = 1
 Group.interface1 = btInterface
 
-# Walking speeds
 Group.speed = 0.5, 1.5
-# Message TTL of 300 minutes (5 hours)
-
 Group.msgTtl = 360
-#360 Haggle 3 infocom 5
-#10080 Reality 20160
 
 # Publisher Group (P) - Source of messages
 Group1.groupID = P
@@ -126,52 +113,32 @@ Group9.router = PublishAndSubscriberRouting
 Group9.nrofHosts = 1
 
 ## Message creation parameters
-# How many event generators
 Events.nrof = 2
-# Class of the first event generator
 Events1.class = ExternalEventsQueue
-# (following settings are specific for the MessageEventGenerator class)
-# Creation interval in seconds (one new message every 25 to 35 seconds)
-Events1.filePath = ./conf/RealityConnectionTraceFinal.txt
-# Haggle3-Infocom5.csv
-# RealityConnectionTraceFinal.txt
+Events1.filePath = ./conf/Haggle3-Infocom5.csv
 
 Events2.class = MessageEventGeneratorNAKT
-# change interval to have more or less messages, see javadocs for more information.
-
 Events2.interval = 1160, 1240
-
-# 25,30 (~120 texts/hour)
-# 290, 310 (~12 texts/hour) Reality1
-# 580, 620 (~ 6 texts/hour)
-# 1160, 1240 (~ 3 texts/ hour) Haggle3 - Infocom5, Reality2
-# 2320, 2480 (~ 1 texts/ hour)
-
 Events2.size = 500k
-# range of message source/destination addresses
 Events2.hosts = 0,97
 Events2.prefix = M
-
 Events2.time = 0, 274883
-#274883 Haggle 3 infocom 5 253283
-#16981816 Reality 16377016 15772216
+Events2.lcnum = 4
 
 # Movement model settings
 MovementModel.rngSeed = 1
 MovementModel.worldSize = 100, 100
 MovementModel.warmup = 1000
 
-
-## Map based movement -movement model specific settings
+## Map based movement - movement model specific settings
 MapBasedMovement.nrofMapFiles = 1
-
 MapBasedMovement.mapFile1 = data/roads.wkt
 
 # Reports
 Report.nrofReports = 1
 Report.warmup = 0
 Report.reportDir = reports/PublishAndSubscribe_Hagle
-    Report.report1 = PublishSubsReport
+Report.report1 = PublishSubsReport
 
 # Optimization settings
 Optimization.cellSizeMult = 5
@@ -181,14 +148,9 @@ Optimization.randomizeUpdateOrder = true
 
 # GUI underlay image settings
 GUI.UnderlayImage.fileName = data/helsinki_underlay.png
-# Image offset in pixels (x, y)
 GUI.UnderlayImage.offset = 64, 20
-# Scaling factor for the image
 GUI.UnderlayImage.scale = 4.75
-# Image rotation (radians)
 GUI.UnderlayImage.rotate = -0.015
 
 # how many events to show in the log panel (default = 30)
 GUI.EventLogPanel.nrofEvents = 100
-# Regular Expression log filter (see Pattern-class from the Java API for RE-matching details)
-#GUI.EventLogPanel.REfilter = .*p[1-9]<->p[1-9]$
