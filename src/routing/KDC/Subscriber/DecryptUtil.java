@@ -1,4 +1,4 @@
-package KDC.Subscriber;
+package routing.KDC.Subscriber;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -38,11 +38,11 @@ public class DecryptUtil {
                 decryptedText = new String(decryptedBytes);
                 return new TupleDe<>(binaryPath, decryptedText);
             } catch (Exception e) {
-                lastAttempt = new TupleDe<>(binaryPath, decryptedText);
+                lastAttempt = new TupleDe<>(binaryPath, decryptedText); //attempt last hash
             }
         }
 
-        // 🔹 Jika semua gagal, return hasil dekripsi terakhir yang dicoba
-        return (lastAttempt != null) ? lastAttempt : new TupleDe<>("❌", "ERROR: Tidak ada key yang valid!");
+        //
+        return (lastAttempt != null) ? lastAttempt : new TupleDe<>("", "");
     }
 }

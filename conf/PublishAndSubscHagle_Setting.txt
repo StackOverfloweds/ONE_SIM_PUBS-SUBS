@@ -2,12 +2,7 @@
 Scenario.name = PUBS_SUBS_Haggle
 Scenario.simulateConnections = false
 Scenario.updateInterval = 0.1
-# 43200s == 12h
-#Scenario.endTime = 43200
 Scenario.endTime = 274883
-
-# 16981816 Reality 8490908
-# 274883 Haggle 3 Infocom 5
 
 # Interface-specific settings
 btInterface.type = SimpleBroadcastInterface
@@ -19,9 +14,9 @@ highspeedInterface.transmitSpeed = 10M
 highspeedInterface.transmitRange = 1000
 
 # Define 4 different node groups
-Scenario.nrofHostGroups = 4
+Scenario.nrofHostGroups = 9
 
-Group.nrofHosts = 10
+Group.nrofHosts = 97
 
 # Common settings for all groups
 Group.movementModel = RandomWalk
@@ -29,22 +24,14 @@ Group.router = PublishAndSubscriberRouting
 PublishAndSubscriberRouting.updateInterval = 300
 PublishAndSubscriberRouting.LCNUM = 4
 
-Group.bufferSize = 20M
-# 10M Haggle3 - Infocom5
-# 20M Reality
+Group.bufferSize = 10M
 
 Group.waitTime = 0, 120
-# All nodes have the bluetooth interface
 Group.nrofInterfaces = 1
 Group.interface1 = btInterface
 
-# Walking speeds
 Group.speed = 0.5, 1.5
-# Message TTL of 300 minutes (5 hours)
-
 Group.msgTtl = 360
-#360 Haggle 3 infocom 5
-#10080 Reality 20160
 
 # Publisher Group (P) - Source of messages
 Group1.groupID = P
@@ -53,9 +40,8 @@ Group1.waitTime = 0, 120
 Group1.speed = 0.5, 1.5
 Group1.interface1 = btInterface
 Group1.nrofInterfaces = 1
-Group1.msgTtl = 300
 Group1.router = PublishAndSubscriberRouting
-Group1.nrofHosts = 30
+Group1.nrofHosts = 34
 
 # Broker Group (B) - Message Forwarding
 Group2.groupID = B
@@ -64,9 +50,8 @@ Group2.waitTime = 0, 60
 Group2.speed = 0.5, 1.5
 Group2.interface1 = btInterface
 Group2.nrofInterfaces = 1
-Group2.msgTtl = 300
 Group2.router = PublishAndSubscriberRouting
-Group2.nrofHosts = 24
+Group2.nrofHosts = 28
 
 # Subscriber Group (S) - Message Consumers
 Group3.groupID = S
@@ -75,67 +60,85 @@ Group3.waitTime = 0, 60
 Group3.speed = 0.5, 1.5
 Group3.interface1 = btInterface
 Group3.nrofInterfaces = 1
-Group3.msgTtl = 300
 Group3.router = PublishAndSubscriberRouting
-Group3.nrofHosts = 30
+Group3.nrofHosts = 35
 
 # Key Distribution Center (KDC) - Manages Encryption Keys
+# Pojok Kiri Atas
 Group4.groupID = K
-Group4.movementModel = RandomStatic
-Group4.waitTime = 0, 60
-Group4.interface1 = btInterface
-Group4.nrofInterfaces = 1
-Group4.msgTtl = 300
-Group4.nrofHosts = 14
+Group4.movementModel = StationaryMovement
+Group4.nodeLocation = 0,0
+Group4.bufferSize = 1024M
 Group4.router = PublishAndSubscriberRouting
+Group4.nrofHosts = 1
+
+# Pojok Kanan Atas
+Group5.groupID = K
+Group5.movementModel = StationaryMovement
+Group5.nodeLocation = 100,0
+Group5.bufferSize = 1024M
+Group5.router = PublishAndSubscriberRouting
+Group5.nrofHosts = 1
+
+# Pojok Kiri Bawah
+Group6.groupID = K
+Group6.movementModel = StationaryMovement
+Group6.nodeLocation = 0,100
+Group6.bufferSize = 1024M
+Group6.router = PublishAndSubscriberRouting
+Group6.nrofHosts = 1
+
+# Pojok Kanan Bawah
+Group7.groupID = K
+Group7.movementModel = StationaryMovement
+Group7.nodeLocation = 100,100
+Group7.bufferSize = 1024M
+Group7.router = PublishAndSubscriberRouting
+Group7.nrofHosts = 1
+
+# Tengah Kiri
+Group8.groupID = K
+Group8.movementModel = StationaryMovement
+Group8.nodeLocation = 0,50
+Group8.bufferSize = 1024M
+Group8.router = PublishAndSubscriberRouting
+Group8.nrofHosts = 1
+
+# Tengah Kanan
+Group9.groupID = K
+Group9.movementModel = StationaryMovement
+Group9.nodeLocation = 100,50
+Group9.bufferSize = 1024M
+Group9.router = PublishAndSubscriberRouting
+Group9.nrofHosts = 1
 
 ## Message creation parameters
-# How many event generators
 Events.nrof = 2
-# Class of the first event generator
 Events1.class = ExternalEventsQueue
-# (following settings are specific for the MessageEventGenerator class)
-# Creation interval in seconds (one new message every 25 to 35 seconds)
-Events1.filePath = ./conf/RealityConnectionTraceFinal.txt
-# Haggle3-Infocom5.csv
-# RealityConnectionTraceFinal.txt
+Events1.filePath = ./conf/Haggle3-Infocom5.csv
 
-Events2.class = MessageEventGenerator
-# change interval to have more or less messages, see javadocs for more information.
-
+Events2.class = MessageEventGeneratorNAKT
 Events2.interval = 1160, 1240
-
-# 25,30 (~120 texts/hour)
-# 290, 310 (~12 texts/hour) Reality1
-# 580, 620 (~ 6 texts/hour)
-# 1160, 1240 (~ 3 texts/ hour) Haggle3 - Infocom5, Reality2
-# 2320, 2480 (~ 1 texts/ hour)
-
 Events2.size = 500k
-# range of message source/destination addresses
-Events2.hosts = 0,79
+Events2.hosts = 0,97
 Events2.prefix = M
-
 Events2.time = 0, 274883
-#274883 Haggle 3 infocom 5 253283
-#16981816 Reality 16377016 15772216
+Events2.lcnum = 4
 
 # Movement model settings
 MovementModel.rngSeed = 1
 MovementModel.worldSize = 100, 100
 MovementModel.warmup = 1000
 
-
-## Map based movement -movement model specific settings
+## Map based movement - movement model specific settings
 MapBasedMovement.nrofMapFiles = 1
-
 MapBasedMovement.mapFile1 = data/roads.wkt
 
 # Reports
 Report.nrofReports = 1
 Report.warmup = 0
-Report.reportDir = reports/PublishAndSubscribe
-    Report.report1 = PublishSubsReport
+Report.reportDir = reports/PublishAndSubscribe_Hagle
+Report.report1 = PublishSubsReport
 
 # Optimization settings
 Optimization.cellSizeMult = 5
@@ -145,14 +148,9 @@ Optimization.randomizeUpdateOrder = true
 
 # GUI underlay image settings
 GUI.UnderlayImage.fileName = data/helsinki_underlay.png
-# Image offset in pixels (x, y)
 GUI.UnderlayImage.offset = 64, 20
-# Scaling factor for the image
 GUI.UnderlayImage.scale = 4.75
-# Image rotation (radians)
 GUI.UnderlayImage.rotate = -0.015
 
 # how many events to show in the log panel (default = 30)
 GUI.EventLogPanel.nrofEvents = 100
-# Regular Expression log filter (see Pattern-class from the Java API for RE-matching details)
-#GUI.EventLogPanel.REfilter = .*p[1-9]<->p[1-9]$

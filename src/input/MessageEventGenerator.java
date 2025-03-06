@@ -58,7 +58,7 @@ public class MessageEventGenerator implements EventQueue {
 	/** Size range of the messages (min, max) */
 	private int[] sizeRange;
 	/** Interval between messages (min, max) */
-	private int[] msgInterval;
+	protected int[] msgInterval;
 	/** Time range for message creation (min, max) */
 	protected double[] msgTime;
 
