@@ -1,4 +1,4 @@
-package KDC.NAKT;
+package routing.KDC.NAKT;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -21,24 +21,25 @@ public class KeyManager {
      * Generates an authorization key K(w).
      * K(w) = HMAC(KDC_secret, topic)
      *
-     * @param num The numeric topic identifier.
+     * @param topic The boolean topic identifier.
      * @return The generated authorization key as a Base64 encoded string.
      */
-    public String generateAuthorizationKey(int num) {
-        return generateHMAC(kdcSecret, String.valueOf(num));
+    public String generateAuthorizationKey(boolean topic) {
+        return generateHMAC(kdcSecret, String.valueOf(topic));
     }
 
     /**
      * Generates a root key Ø.
      * Ø = HMAC(K(w), num)
      *
-     * @param num The numeric topic identifier.
+     * @param w The boolean topic identifier.
      * @return The generated root key as a Base64 encoded string.
      */
-    public String generateRootKey(int num) {
-        String authorizationKey = generateAuthorizationKey(num);
-        return generateHMAC(authorizationKey, String.valueOf(num));
+    public String generateRootKey(boolean w) {
+        String authorizationKey = generateAuthorizationKey(w);
+        return generateHMAC(authorizationKey, String.valueOf(w));
     }
+
 
     /**
      * Generates a child key using a parent key and binary path.

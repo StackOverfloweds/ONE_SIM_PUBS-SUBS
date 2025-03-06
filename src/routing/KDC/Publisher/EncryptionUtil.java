@@ -1,4 +1,4 @@
-package KDC.Publisher;
+package routing.KDC.Publisher;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;

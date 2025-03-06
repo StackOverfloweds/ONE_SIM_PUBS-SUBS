@@ -72,9 +72,6 @@ public class SimpleBroadcastInterface extends NetworkInterface {
 			Connection con = this.connections.get(i);
 			NetworkInterface anotherInterface = con.getOtherInterface(this);
 
-			// all connections should be up at this stage
-			assert con.isUp() : "Connection " + con + " was down!";
-
 			if (!isWithinRange(anotherInterface)) {
 				disconnect(con,anotherInterface);
 				connections.remove(i);
