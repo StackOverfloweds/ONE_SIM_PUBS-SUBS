@@ -36,6 +36,7 @@ public class CCDTN extends ActiveRouter {
 
     protected MessageRegistryImpl messageRegistry;
 
+    public static Map<Double, Integer> kdcLoad;
     /**
      * Constructor: Initializes CCDTN with settings.
      *
@@ -46,6 +47,7 @@ public class CCDTN extends ActiveRouter {
         initNAKT();
         this.startTimestamps = new HashMap<>();
         this.connHistory = new HashMap<>();
+        this.kdcLoad = new HashMap<>();
     }
 
     /**
@@ -58,6 +60,7 @@ public class CCDTN extends ActiveRouter {
         initNAKT();
         startTimestamps = new HashMap<>(c.startTimestamps);
         connHistory = new HashMap<>(c.connHistory);
+        kdcLoad = new HashMap<>(c.kdcLoad);
     }
 
     private void initNAKT() {

@@ -2,21 +2,27 @@ package routing.KDC.NAKT;
 
 import core.DTNHost;
 import core.Message;
+import core.SimClock;
 import routing.util.TupleDe;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class NAKTBuilder extends KeyManager {
     private Map<DTNHost, TupleDe<String, String>> keyEncryption;
     private Map<DTNHost, List<TupleDe<String, String>>> keyAuthentication;
 
     private final int lcnum;
+    Map<DTNHost, TupleDe<Double, Integer>> kdcLoad;
 
     public NAKTBuilder(int lcnum) {
         super(); // Call parent constructor of KeyManager
         this.lcnum = lcnum;
         this.keyEncryption = new HashMap<>();
         this.keyAuthentication = new HashMap<>();
+        this.kdcLoad = new HashMap<>();
     }
 
     /**
@@ -30,7 +36,7 @@ public class NAKTBuilder extends KeyManager {
      */
     public boolean buildNAKT(List<DTNHost> kdcHosts, Message msg) {
         boolean success = false;
-
+        int i = 0;
         for (DTNHost kdcHost : kdcHosts) {
             if (!kdcHost.isKDC()) continue;
 
@@ -42,7 +48,7 @@ public class NAKTBuilder extends KeyManager {
             if (registerData == null || registerData.isEmpty() || getUnSubs == null || getUnSubs.isEmpty()) {
                 continue;
             }
-
+            int processCount = 0; // Jumlah proses yang dilakukan oleh KDC ini
             for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : registerData.entrySet()) {
                 DTNHost publisher = entry.getKey();
                 List<TupleDe<Boolean, Integer>> subscriberInfo = entry.getValue();
@@ -71,11 +77,19 @@ public class NAKTBuilder extends KeyManager {
                             if (!keyAuthentication.containsKey(subscriber)) {
                                 handleAuthentication(subscriber, topicVal, secondValue, getUnSubs, msg);
                             }
+                            processCount++; // Tambah jumlah proses
                         }
                     }
                 }
+                i++;
             }
             success = true;
+            double elapsedTime = SimClock.getTime();
+            // i for the number of kdc create NAKT
+            // Simpan data pemrosesan dalam `kdcLoad`
+            kdcLoad.put(kdcHost, new TupleDe<>(elapsedTime, processCount));
+            // add propherty for calculate the kdcload
+            msg.addProperty("KDC_Load", kdcLoad);
         }
         return success;
     }
@@ -139,8 +153,6 @@ public class NAKTBuilder extends KeyManager {
     }
 
 
-
-
     /**
      * Finds the nearest power of two that is greater than or equal to the given value.
      *
@@ -191,7 +203,5 @@ public class NAKTBuilder extends KeyManager {
         encryptTreeNodes(min, mid, leftKey, leftPath, depth + 1, keyList);
         encryptTreeNodes(mid + 1, max, rightKey, rightPath, depth + 1, keyList);
     }
-
-
 }
 

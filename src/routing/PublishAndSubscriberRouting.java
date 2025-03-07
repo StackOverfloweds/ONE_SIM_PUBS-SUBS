@@ -7,6 +7,7 @@
 package routing;
 
 import core.*;
+import routing.KDC.NAKT.KDCLoad;
 import routing.KDC.Publisher.EncryptionUtil;
 import routing.KDC.Subscriber.KeySubscriber;
 import routing.util.TupleDe;
@@ -18,7 +19,7 @@ import java.util.*;
  * for Delay-Tolerant Networks (DTNs). It manages secure encryption, subscriber authentication,
  * and message forwarding using Numeric Attribute Key Trees (NAKT).
  */
-public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber {
+public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber, KDCLoad {
     // Namespace settings
     private static final String PUBSROUTING_NS = "PublishAndSubscriberRouting";
 
@@ -288,17 +289,6 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber 
     }
 
     public Map<DTNHost, Integer> getKeys() {
-        // Get all connections
-        Collection<Connection> connections = getConnections();
-        if (connections == null) {
-            return null;
-        }
-
-        // Get the host
-        DTNHost host = getHost();
-        if (host == null) {
-            return null;
-        }
 
         // Get the message collection
         Collection<Message> msgCollection = getMessageCollection();
@@ -309,37 +299,64 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber 
         // Map untuk menyimpan jumlah total elemen dalam getKeyAuth untuk setiap host
         Map<DTNHost, Integer> keyCounts = new HashMap<>();
 
-        for (Connection con : connections) {
-            DTNHost other = con.getOtherNode(host);
-            PublishAndSubscriberRouting othRouter = (PublishAndSubscriberRouting) other.getRouter();
-            if (othRouter.isTransferring()) {
+        for (Message msg : msgCollection) {
+            if (msg == null) {
                 continue;
             }
 
-            for (Message msg : msgCollection) {
-                if (msg == null) {
-                    continue;
-                }
+            // Ambil properti getKeyAuth dari message
+            Map<DTNHost, List<TupleDe<String, String>>> getKeyAuth =
+                    (Map<DTNHost, List<TupleDe<String, String>>>) msg.getProperty(MESSAGE_KEY_AUTHENTICATION_S);
 
-                // Ambil properti getKeyAuth dari message
-                Map<DTNHost, List<TupleDe<String, String>>> getKeyAuth =
-                        (Map<DTNHost, List<TupleDe<String, String>>>) msg.getProperty(MESSAGE_KEY_AUTHENTICATION_S);
+            if (getKeyAuth != null) {
+                for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : getKeyAuth.entrySet()) {
+                    DTNHost dtnHost = entry.getKey();
+                    List<TupleDe<String, String>> tuples = entry.getValue();
 
-                if (getKeyAuth != null) {
-                    for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : getKeyAuth.entrySet()) {
-                        DTNHost dtnHost = entry.getKey();
-                        List<TupleDe<String, String>> tuples = entry.getValue();
+                    // Hitung jumlah TupleDe dalam daftar
+                    int count = (tuples != null) ? tuples.size() : 0;
 
-                        // Hitung jumlah TupleDe dalam daftar
-                        int count = (tuples != null) ? tuples.size() : 0;
-
-                        // Tambahkan ke dalam map
-                        keyCounts.put(dtnHost, keyCounts.getOrDefault(dtnHost, 0) + count);
-                    }
+                    // Tambahkan ke dalam map
+                    keyCounts.put(dtnHost, count);
                 }
             }
         }
+
         return keyCounts;
+    }
+
+    public Map<Double, Integer> getKDCLoad() {
+        Map<Double, Integer> getKDCLOAD = new HashMap<>();
+
+        // Get the message collection
+        Collection<Message> msgCollection = getMessageCollection();
+        if (msgCollection.isEmpty()) {
+            return Collections.emptyMap(); // Hindari null return
+        }
+
+        for (Message msg : msgCollection) {
+            if (msg == null) {
+                continue;
+            }
+
+            Map<DTNHost, TupleDe<Double, Integer>> kdcLoad =
+                    (Map<DTNHost, TupleDe<Double, Integer>>) msg.getProperty("KDC_Load");
+
+            if (kdcLoad == null || kdcLoad.isEmpty()) {
+                continue;
+            }
+
+            for (Map.Entry<DTNHost, TupleDe<Double, Integer>> entry : kdcLoad.entrySet()) {
+                TupleDe<Double, Integer> value = entry.getValue();
+                Double time = value.getFirst();
+                Integer count = value.getSecond();
+
+                // Tambahkan ke Map hasil (hindari overwrite jika sudah ada waktu yang sama)
+                getKDCLOAD.put(time, count);
+            }
+        }
+
+        return getKDCLOAD;
     }
 
 
