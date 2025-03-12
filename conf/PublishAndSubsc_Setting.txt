@@ -118,18 +118,18 @@ MovementModel.rngSeed = 3
 MovementModel.worldSize = 300, 300
 MovementModel.warmup = 1000
 
-
 ## Map based movement -movement model specific settings
 MapBasedMovement.nrofMapFiles = 1
 
 MapBasedMovement.mapFile1 = data/roads.wkt
 
 # Reports
-Report.nrofReports = 2
+Report.nrofReports = 3
 Report.warmup = 0
 Report.reportDir = reports/PublishAndSubscribe
 Report.report1 = PublishSubsReport
 Report.report2 = SubscriberGetKey
+Report.report3 = KDCLoad
 
 # Optimization settings
 Optimization.cellSizeMult = 5

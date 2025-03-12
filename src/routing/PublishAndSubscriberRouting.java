@@ -128,7 +128,7 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
             System.err.println("Error: getHost() is null!");
             return false;
         }
-        List<DTNHost> brokerHosts = getAllBrokers();
+        List<DTNHost> brokerHosts = getAllBroker.getAllBrokers();
 
         // Iterate through all connections
         for (Connection con : connections) {
@@ -325,8 +325,8 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
         return keyCounts;
     }
 
-    public Map<Double, Integer> getKDCLoad() {
-        Map<Double, Integer> getKDCLOAD = new HashMap<>();
+    public Map<DTNHost, Integer> getKDCLoad() {
+        Map<DTNHost, Integer> getKDCLOAD = new HashMap<>();
 
         // Get the message collection
         Collection<Message> msgCollection = getMessageCollection();
@@ -339,20 +339,18 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
                 continue;
             }
 
-            Map<DTNHost, TupleDe<Double, Integer>> kdcLoad =
-                    (Map<DTNHost, TupleDe<Double, Integer>>) msg.getProperty("KDC_Load");
+            Map<DTNHost,  Integer> kdcLoad =
+                    (Map<DTNHost,  Integer>) msg.getProperty("KDC_Load");
 
             if (kdcLoad == null || kdcLoad.isEmpty()) {
                 continue;
             }
 
-            for (Map.Entry<DTNHost, TupleDe<Double, Integer>> entry : kdcLoad.entrySet()) {
-                TupleDe<Double, Integer> value = entry.getValue();
-                Double time = value.getFirst();
-                Integer count = value.getSecond();
+            for (Map.Entry<DTNHost, Integer> entry : kdcLoad.entrySet()) {
+                DTNHost dtnHost = entry.getKey();
+                int value = entry.getValue();
 
-                // Tambahkan ke Map hasil (hindari overwrite jika sudah ada waktu yang sama)
-                getKDCLOAD.put(time, count);
+                getKDCLOAD.put(dtnHost, value);
             }
         }
 

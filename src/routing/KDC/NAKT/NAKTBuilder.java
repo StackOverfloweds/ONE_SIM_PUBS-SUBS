@@ -2,7 +2,7 @@ package routing.KDC.NAKT;
 
 import core.DTNHost;
 import core.Message;
-import core.SimClock;
+import routing.KDC.Broker.GetAllBroker;
 import routing.util.TupleDe;
 
 import java.util.ArrayList;
@@ -15,7 +15,7 @@ public class NAKTBuilder extends KeyManager {
     private Map<DTNHost, List<TupleDe<String, String>>> keyAuthentication;
 
     private final int lcnum;
-    Map<DTNHost, TupleDe<Double, Integer>> kdcLoad;
+    Map<DTNHost, Integer> kdcLoad;
 
     public NAKTBuilder(int lcnum) {
         super(); // Call parent constructor of KeyManager
@@ -84,10 +84,9 @@ public class NAKTBuilder extends KeyManager {
                 i++;
             }
             success = true;
-            double elapsedTime = SimClock.getTime();
             // i for the number of kdc create NAKT
             // Simpan data pemrosesan dalam `kdcLoad`
-            kdcLoad.put(kdcHost, new TupleDe<>(elapsedTime, processCount));
+            kdcLoad.put(kdcHost,processCount);
             // add propherty for calculate the kdcload
             msg.addProperty("KDC_Load", kdcLoad);
         }
@@ -110,6 +109,10 @@ public class NAKTBuilder extends KeyManager {
         if (selectedKey != null) {
             keyEncryption.put(publisher, selectedKey);
             msg.addProperty("KDC_Key_Encryption_", keyEncryption);
+        }
+        List<DTNHost> brokers = getAllBrokers();
+        if (!brokers.isEmpty()) {
+            addMessageToHostsAndForward(msg, brokers);
         }
     }
 
@@ -148,6 +151,10 @@ public class NAKTBuilder extends KeyManager {
             if (!derivedKeys.isEmpty()) {
                 keyAuthentication.put(subscriber, derivedKeys);
                 msg.addProperty("KDC_Key_Authentication_", keyAuthentication);
+            }
+            List<DTNHost> brokers = getAllBrokers();
+            if (!brokers.isEmpty()) {
+                addMessageToHostsAndForward(msg, brokers);
             }
         }
     }
@@ -202,6 +209,38 @@ public class NAKTBuilder extends KeyManager {
         // 🔹 **Recursive call to generate deeper key nodes**
         encryptTreeNodes(min, mid, leftKey, leftPath, depth + 1, keyList);
         encryptTreeNodes(mid + 1, max, rightKey, rightPath, depth + 1, keyList);
+    }
+
+    /**
+     * Sends the message to brokers first, then forwards it to relevant hosts in keyEncryption and keyAuthentication.
+     *
+     * @param msg     The message to be sent.
+     * @param brokers The list of broker hosts.
+     */
+    private void addMessageToHostsAndForward(Message msg, List<DTNHost> brokers) {
+        // Send to all brokers first
+        for (DTNHost broker : brokers) {
+            broker.addBufferToHost(msg);
+        }
+
+        // Forward to hosts in keyEncryption (publishers)
+        for (Map.Entry<DTNHost, TupleDe<String, String>> entry : keyEncryption.entrySet()) {
+            entry.getKey().addBufferToHost(msg);
+        }
+
+        // Forward to hosts in keyAuthentication (subscribers)
+        for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : keyAuthentication.entrySet()) {
+            entry.getKey().addBufferToHost(msg);
+        }
+    }
+
+    /**
+     * Retrieves a list of all available brokers.
+     *
+     * @return A list of DTNHost instances representing brokers.
+     */
+    private List<DTNHost> getAllBrokers() {
+        return new GetAllBroker().getAllBrokers();
     }
 }
 
