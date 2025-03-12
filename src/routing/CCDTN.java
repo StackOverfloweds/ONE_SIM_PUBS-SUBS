@@ -9,8 +9,8 @@
 
 package routing;
 
+import routing.KDC.Broker.GetAllBroker;
 import routing.KDC.NAKT.KeyManager;
-import routing.KDC.NAKT.NAKTBuilder;
 import routing.KDC.Subscriber.DecryptUtil;
 import core.*;
 
@@ -27,13 +27,14 @@ public class CCDTN extends ActiveRouter {
     public static final String MESSAGE_KEY_ENCRYPTION_S = "KDC_Key_Encryption_";
     public static final String MESSAGE_KEY_AUTHENTICATION_S = "KDC_Key_Authentication_";
 
+    public static Map<Double, Integer> kdcLoad;
+
     // Maps to store connection timestamps and history
     protected Map<DTNHost, Double> startTimestamps;
     protected Map<DTNHost, List<Duration>> connHistory;
 
-    protected NAKTBuilder naktBuilder;
     protected KeyManager keyManager;
-
+    protected GetAllBroker getAllBroker;
     protected MessageRegistryImpl messageRegistry;
 
     /**
@@ -46,6 +47,7 @@ public class CCDTN extends ActiveRouter {
         initNAKT();
         this.startTimestamps = new HashMap<>();
         this.connHistory = new HashMap<>();
+        this.kdcLoad = new HashMap<>();
     }
 
     /**
@@ -58,12 +60,13 @@ public class CCDTN extends ActiveRouter {
         initNAKT();
         startTimestamps = new HashMap<>(c.startTimestamps);
         connHistory = new HashMap<>(c.connHistory);
+        kdcLoad = new HashMap<>(c.kdcLoad);
     }
 
     private void initNAKT() {
-        this.naktBuilder = new NAKTBuilder(4); // set lcnum 4
         this.keyManager = new KeyManager();
         this.messageRegistry = new MessageRegistryImpl();
+        this.getAllBroker = new GetAllBroker();
     }
 
 
@@ -214,10 +217,8 @@ public class CCDTN extends ActiveRouter {
                 continue;
             }
 
-            for (DTNHost getSub : SimScenario.getInstance().getHosts()) {
-                if (getSub.getRouter() instanceof CCDTN) {
-                    if (connHistory.containsKey(subscriberId)) {
-//                        System.out.println("same");
+            for (DTNHost host : SimScenario.getInstance().getSubscriber()) {
+                    if (host.equals(subscriberId)) {
                         TupleDe<String, String> decryptedContent = DecryptUtil.decryptMessage(msgEncrypt, keyList);
 //                        System.out.println("dekrip : "+decryptedContent);
                         if (decryptedContent != null && !decryptedContent.getSecond().isEmpty()) {
@@ -239,7 +240,7 @@ public class CCDTN extends ActiveRouter {
                             return true;
                         }
                     }
-                }
+
             }
         }
 
@@ -327,17 +328,6 @@ public class CCDTN extends ActiveRouter {
         this.tryAllMessagesToAllConnections();
 
     }
-
-    protected List<DTNHost> getAllBrokers() {
-        List<DTNHost> brokerList = new ArrayList<>();
-        for (DTNHost host : SimScenario.getInstance().getHosts()) { // Jika ada metode untuk mendapatkan semua host
-            if (host.isBroker()) {
-                brokerList.add(host);
-            }
-        }
-        return brokerList;
-    }
-
 
     /**
      * Creates a replica of this router.
