@@ -326,36 +326,23 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
     }
 
     public Map<DTNHost, Integer> getKDCLoad() {
-        Map<DTNHost, Integer> getKDCLOAD = new HashMap<>();
-
-        // Get the message collection
-        Collection<Message> msgCollection = getMessageCollection();
-        if (msgCollection.isEmpty()) {
-            return Collections.emptyMap(); // Hindari null return
+        if (kdcLoad == null || kdcLoad.isEmpty()) {
+            return Collections.emptyMap(); // Hindari return null
         }
 
-        for (Message msg : msgCollection) {
-            if (msg == null) {
-                continue;
-            }
+        Map<DTNHost, Integer> getKDCLOAD = new HashMap<>();
 
-            Map<DTNHost,  Integer> kdcLoad =
-                    (Map<DTNHost,  Integer>) msg.getProperty("KDC_Load");
-
-            if (kdcLoad == null || kdcLoad.isEmpty()) {
-                continue;
-            }
-
-            for (Map.Entry<DTNHost, Integer> entry : kdcLoad.entrySet()) {
-                DTNHost dtnHost = entry.getKey();
-                int value = entry.getValue();
-
-                getKDCLOAD.put(dtnHost, value);
-            }
+        for (Map.Entry<DTNHost, Integer> entry : kdcLoad.entrySet()) {
+            DTNHost dtnHost = entry.getKey();
+            Integer count = (entry.getValue() != null) ? entry.getValue() : 0;
+            getKDCLOAD.put(dtnHost, count);
         }
 
         return getKDCLOAD;
     }
+
+
+
 
 
 }

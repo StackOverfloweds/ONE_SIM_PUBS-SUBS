@@ -12,7 +12,7 @@ import java.util.*;
 public class SubscriberGetKey extends Report implements UpdateListener {
     private final Map<Double, Integer> subscriberKeyCounts = new LinkedHashMap<>();
     private double lastUpdate = 0;
-    private final double threshold = 300; // Interval 300 detik
+    private final double threshold = 120;
 
     public void updated(List<DTNHost> hosts) {
         if (isWarmup()) {
@@ -33,7 +33,10 @@ public class SubscriberGetKey extends Report implements UpdateListener {
                         Map<DTNHost, Integer> localSubscribers = routing.getKeys();
 
                         if (localSubscribers != null) {
-                            totalKeys += localSubscribers.size(); // Jumlah subscriber keys dalam interval ini
+                            for (Map.Entry<DTNHost, Integer> entry : localSubscribers.entrySet()) {
+                                int getValue = entry.getValue() != null ? entry.getValue() : 0;
+                                totalKeys += getValue;
+                            }
                         }
                     }
                 }
