@@ -27,7 +27,7 @@ public class CCDTN extends ActiveRouter {
     public static final String MESSAGE_KEY_ENCRYPTION_S = "KDC_Key_Encryption_";
     public static final String MESSAGE_KEY_AUTHENTICATION_S = "KDC_Key_Authentication_";
 
-    public static Map<Double, Integer> kdcLoad;
+    public static Map<DTNHost, Integer> kdcLoad;
 
     // Maps to store connection timestamps and history
     protected Map<DTNHost, Double> startTimestamps;

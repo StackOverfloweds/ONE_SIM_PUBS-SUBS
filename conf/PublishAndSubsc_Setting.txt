@@ -26,7 +26,7 @@ Group.waitTime = 0, 120
 Group.nrofInterfaces = 1
 Group.interface1 = btInterface
 Group.speed = 0.5, 1.5
-Group.msgTtl = 360
+Group.msgTtl = 1000
 
 # Publisher Group (P) - Source of messages
 Group1.groupID = P
