@@ -36,7 +36,7 @@ import core.SimClock;
  *
  */
 public class GUIControls extends JPanel implements ActionListener, ChangeListener {
-	private static final String PATH_GRAPHICS = "buttonGraphics/";
+	private static final String PATH_GRAPHICS = "/gui/buttonGraphics/";
 	private static final String ICON_PAUSE = "Pause16.gif";
 	private static final String ICON_PLAY = "Play16.gif";
 	private static final String ICON_ZOOM = "Zoom24.gif";
@@ -166,10 +166,25 @@ public class GUIControls extends JPanel implements ActionListener, ChangeListene
 		zoomSelector.addChangeListener(this);
 		this.screenShotButton.addActionListener(this);
 	}
-	
-	
+
+
 	private ImageIcon createImageIcon(String path) {
-		java.net.URL imgURL = getClass().getResource(PATH_GRAPHICS+path);
+		// Construct the full path to the image
+		String fullPath = PATH_GRAPHICS + path;
+		System.out.println("Attempting to load image from: " + fullPath);
+
+		// Get the URL of the image resource
+		java.net.URL imgURL = getClass().getResource(fullPath);
+
+		// Check if the resource was found
+		if (imgURL == null) {
+			System.err.println("Image not found at: " + fullPath);
+			System.err.println("Current working directory: " + System.getProperty("user.dir"));
+			System.err.println("Classpath: " + System.getProperty("java.class.path"));
+			return null; // Return null if the image is not found
+		}
+
+		System.out.println("Successfully loaded image from: " + imgURL);
 		return new ImageIcon(imgURL);
 	}
 	

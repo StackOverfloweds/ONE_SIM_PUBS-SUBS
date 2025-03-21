@@ -16,7 +16,7 @@ public class Duration
 	public double end;
 	
 	/**
-	 * Standard constructor that assigns s to start and e to end.
+	 * Standard constructor that assigns s to start and e to end.QSDA
 	 * 
 	 * @param s Initial start value
 	 * @param e Initial end value

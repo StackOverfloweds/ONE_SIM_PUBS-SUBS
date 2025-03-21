@@ -223,13 +223,13 @@ public class PeopleRankActiveRouter extends ActiveRouter {
                         }
                     }
                     // while ∃ m ∈ buffer(i) do
-                    Buffer messageBuffer = new Buffer(); // Instantiate Buffer with settings
-                    int bufferSize = messageBuffer.getBufferSize(thisHost);
-                    while (bufferSize > 0) {
-                        if (perOtherHost >= perThisHost || otherHost.equals(m.getTo())) {
-                            return true; // Condition met, Forward
-                        }
-                    }
+//                    Buffer messageBuffer = new Buffer(); // Instantiate Buffer with settings
+//                    int bufferSize = messageBuffer.getBufferSize(thisHost);
+//                    while (bufferSize > 0) {
+//                        if (perOtherHost >= perThisHost || otherHost.equals(m.getTo())) {
+//                            return true; // Condition met, Forward
+//                        }
+//                    }
                 }
 
                 // If the destination host is not in contact with the current host, check the

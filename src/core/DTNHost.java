@@ -1,15 +1,17 @@
-/* 
+/*
  * Copyright 2010 Aalto University, ComNet
- * Released under GPLv3. See LICENSE.txt for details. 
+ * Released under GPLv3. See LICENSE.txt for details.
  */
 package core;
 
-import java.util.*;
 import movement.MovementModel;
 import movement.Path;
 import routing.MessageRouter;
 import routing.RoutingInfo;
 import routing.community.Duration;
+import routing.util.TupleDe;
+
+import java.util.*;
 
 /**
  * A DTN capable host.
@@ -19,8 +21,8 @@ public class DTNHost implements Comparable<DTNHost> {
     private static int nextAddress = 0;
     private int address;
 
-    private Coord location; 	// where is the host
-    private Coord destination;	// where is it going
+    private Coord location;    // where is the host
+    private Coord destination;    // where is it going
 
     private MessageRouter router;
     private MovementModel movement;
@@ -36,7 +38,7 @@ public class DTNHost implements Comparable<DTNHost> {
     // tambahan testing
     public List<Duration> intervals;
     public List<Double> congestionRatio = new ArrayList<Double>();
-	public List<Double> dataInContact = new ArrayList<Double>();
+    public List<Double> dataInContact = new ArrayList<Double>();
     public List<Double> ema = new ArrayList<Double>();
     public List<Double> dummyForReward = new ArrayList<Double>();
 
@@ -50,13 +52,12 @@ public class DTNHost implements Comparable<DTNHost> {
     public double totalContactTime = 0;
 
     // crete variable for pubs-susb
-    private boolean isPublisher = false;
-    private boolean isBroker = false;
-    private boolean isSubscriber = false;
+    // kdc is key distributed center for key management of content publisher
+    private List<Double> socialProfile;
+    private List<Boolean> socialProfileOI;
+    private List<TupleDe<Integer, Integer>> numericAtribute; //min max atribute value of int
 
-    private List<Double> interest;
-    private List<Boolean> ownInterest;
-        
+
     static {
         DTNSim.registerForReset(DTNHost.class.getCanonicalName());
         reset();
@@ -65,64 +66,46 @@ public class DTNHost implements Comparable<DTNHost> {
     /**
      * Creates a new DTNHost.
      *
-     * @param msgLs Message listeners
-     * @param movLs Movement listeners
-     * @param groupId GroupID of this host
-     * @param interf List of NetworkInterfaces for the class
-     * @param comBus Module communication bus object
-     * @param mmProto Prototype of the movement model of this host
+     * @param msgLs        Message listeners
+     * @param movLs        Movement listeners
+     * @param groupId      GroupID of this host
+     * @param interf       List of NetworkInterfaces for the class
+     * @param comBus       Module communication bus object
+     * @param mmProto      Prototype of the movement model of this host
      * @param mRouterProto Prototype of the message router of this host
      */
-    public DTNHost(List<MessageListener> msgLs,
-            List<MovementListener> movLs,
-            String groupId, List<NetworkInterface> interf,
-            ModuleCommunicationBus comBus,
-            MovementModel mmProto, MessageRouter mRouterProto) {
+    public DTNHost(List<MessageListener> msgLs, List<MovementListener> movLs, String groupId, List<NetworkInterface> interf, ModuleCommunicationBus comBus, MovementModel mmProto, MessageRouter mRouterProto) {
         this.comBus = comBus;
         this.location = new Coord(0, 0);
         this.address = getNextAddress();
+        this.name = groupId + address;
         this.net = new ArrayList<NetworkInterface>();
+        Random random = new Random();
 
-        // create initial node
-        this.isPublisher = false;
-        this.isSubscriber = false;
-        this.isBroker = false;
+        this.socialProfile = new ArrayList<>();
+        this.socialProfileOI = new ArrayList<>();
+        this.numericAtribute = new ArrayList<>();
 
-        // create role for pubs-subs with group
-
+        // ✅ **Initialize subscriber attributes if the entity is a subscriber**
         if (groupId.startsWith("S")) {
-            isSubscriber = true;
-            name = "Subscriber_" + groupId + "_" + address;
-        } else if (groupId.startsWith("P")) {
-            isPublisher = true;
-            name = "Publisher_" + groupId + "_" + address;
-        } else if (groupId.startsWith("B")) {
-            isBroker = true;
-            name = "Broker_" + groupId + "_" + address;
-        } else {
-            // Jika GroupID tidak sesuai dengan peran yang ditentukan
-            throw new IllegalArgumentException("Invalid GroupID: " + groupId);
-        }
-
-        // create subscriber interest for something random
-        if (isSubscriber) {
-            Random random = new Random();
-            ownInterest = new ArrayList<Boolean>();
-            interest = new ArrayList<Double>();
-
-            // just set random value for interest subsriber
-            int numInterest = 1 +random.nextInt(5);
-
-            // looping for the interest
-            while (numInterest > 0) {
-                double interestValue = random.nextDouble();
-                interest.add(interestValue);
-                ownInterest.add(true);
-                numInterest--;
+            int index = 0;
+            while (index < 5) {
+                // ✅ **Randomly determine if numericAtribute should store a min-max range or default (0,0)**
+                if (random.nextBoolean()) {
+                    int min = random.nextInt(30); // Generate a random min value between 0 and 30
+                    int max = random.nextInt(30 - min) + min; // Generate max value between min and 30
+                    numericAtribute.add(new TupleDe<>(min, max));
+                    socialProfileOI.add(true);
+                    socialProfile.add(0.5); // weight true = 0.5
+                } else {
+                    numericAtribute.add(new TupleDe<>(0, 0)); // Default range (0,0)
+                    socialProfileOI.add(false);
+                    socialProfile.add(0.0); // weight true = 0.5
+                }
+                index++;
             }
 
-        }       
-
+        }
         for (NetworkInterface i : interf) {
             NetworkInterface ni = i.replicate();
             ni.setHost(this);
@@ -138,7 +121,6 @@ public class DTNHost implements Comparable<DTNHost> {
         this.movement = mmProto.replicate();
         this.movement.setComBus(comBus);
         setRouter(mRouterProto.replicate());
-
         this.location = movement.getInitialLocation();
 
         this.nextTimeToMove = movement.nextPathAvailable();
@@ -162,6 +144,7 @@ public class DTNHost implements Comparable<DTNHost> {
         // this.ema = new ArrayList<Double>();
         // this.ema.add(0.0);
     }
+
     /**
      * Returns a new network interface address and increments the address for
      * subsequent calls.
@@ -369,8 +352,7 @@ public class DTNHost implements Comparable<DTNHost> {
     /**
      * Force a connection event
      */
-    public void forceConnection(DTNHost anotherHost, String interfaceId,
-            boolean up) {
+    public void forceConnection(DTNHost anotherHost, String interfaceId, boolean up) {
         NetworkInterface ni;
         NetworkInterface no;
 
@@ -384,8 +366,7 @@ public class DTNHost implements Comparable<DTNHost> {
             ni = getInterface(1);
             no = anotherHost.getInterface(1);
 
-            assert (ni.getInterfaceType().equals(no.getInterfaceType())) :
-                    "Interface types do not match.  Please specify interface type explicitly";
+            assert (ni.getInterfaceType().equals(no.getInterfaceType())) : "Interface types do not match.  Please specify interface type explicitly";
         }
 
         if (up) {
@@ -399,9 +380,7 @@ public class DTNHost implements Comparable<DTNHost> {
      * for tests only --- do not use!!!
      */
     public void connect(DTNHost h) {
-        System.err.println(
-                "WARNING: using deprecated DTNHost.connect(DTNHost)"
-                + "\n Use DTNHost.forceConnection(DTNHost,null,true) instead");
+        System.err.println("WARNING: using deprecated DTNHost.connect(DTNHost)" + "\n Use DTNHost.forceConnection(DTNHost,null,true) instead");
         forceConnection(h, null, true);
     }
 
@@ -457,10 +436,8 @@ public class DTNHost implements Comparable<DTNHost> {
         }
 
         // move towards the point for possibleMovement amount
-        dx = (possibleMovement / distance) * (this.destination.getX()
-                - this.location.getX());
-        dy = (possibleMovement / distance) * (this.destination.getY()
-                - this.location.getY());
+        dx = (possibleMovement / distance) * (this.destination.getX() - this.location.getX());
+        dy = (possibleMovement / distance) * (this.destination.getY() - this.location.getY());
         this.location.translate(dx, dy);
     }
 
@@ -507,7 +484,7 @@ public class DTNHost implements Comparable<DTNHost> {
     /**
      * Start receiving a message from another host
      *
-     * @param m The message
+     * @param m    The message
      * @param from Who the message is from
      * @return The value returned by
      * {@link MessageRouter#receiveMessage(Message, DTNHost)}
@@ -516,7 +493,7 @@ public class DTNHost implements Comparable<DTNHost> {
         int retVal = this.router.receiveMessage(m, from);
 
         if (retVal == MessageRouter.RCV_OK) {
-            m.addNodeOnPath(this);	// add this node on the messages path
+            m.addNodeOnPath(this);    // add this node on the messages path
         }
 
         return retVal;
@@ -536,7 +513,7 @@ public class DTNHost implements Comparable<DTNHost> {
     /**
      * Informs the host that a message was successfully transferred.
      *
-     * @param id Identifier of the message
+     * @param id   Identifier of the message
      * @param from From who the message was from
      */
     public void messageTransferred(String id, DTNHost from) {
@@ -546,10 +523,10 @@ public class DTNHost implements Comparable<DTNHost> {
     /**
      * Informs the host that a message transfer was aborted.
      *
-     * @param id Identifier of the message
-     * @param from From who the message was from
+     * @param id             Identifier of the message
+     * @param from           From who the message was from
      * @param bytesRemaining Nrof bytes that were left before the transfer would
-     * have been ready; or -1 if the number of bytes is not known
+     *                       have been ready; or -1 if the number of bytes is not known
      */
     public void messageAborted(String id, DTNHost from, int bytesRemaining) {
         this.router.messageAborted(id, from, bytesRemaining);
@@ -567,11 +544,11 @@ public class DTNHost implements Comparable<DTNHost> {
     /**
      * Deletes a message from this host
      *
-     * @param id Identifier of the message
+     * @param id   Identifier of the message
      * @param drop True if the message is deleted because of "dropping" (e.g.
-     * buffer is full) or false if it was deleted for some other reason (e.g.
-     * the message got delivered to final destination). This effects the way the
-     * removing is reported to the message listeners.
+     *             buffer is full) or false if it was deleted for some other reason (e.g.
+     *             the message got delivered to final destination). This effects the way the
+     *             removing is reported to the message listeners.
      */
     public void deleteMessage(String id, boolean drop) {
         this.router.deleteMessage(id, drop);
@@ -626,29 +603,107 @@ public class DTNHost implements Comparable<DTNHost> {
         }
         return cek.toString();
     }
+    // ✅ **Identify the role of the entity in the Publish-Subscribe system**
 
-    // identified the publish, broker and subscriber
+    /**
+     * Checks if the current entity is a Publisher.
+     *
+     * @return true if the entity is a Publisher, otherwise false.
+     */
     public boolean isPublisher() {
-        return this.isPublisher;
+        List<DTNHost> getPublisher = SimScenario.getInstance().getPublisher();
+        if (getPublisher == null) {
+            return false;
+        }
+        return true;
     }
+
+    /**
+     * Checks if the current entity is a Broker.
+     *
+     * @return true if the entity is a Broker, otherwise false.
+     */
     public boolean isBroker() {
-        return this.isBroker;
-
+        List<DTNHost> getBroker = SimScenario.getInstance().getBroker();
+        if (getBroker == null) {
+            return false;
+        }
+        return true;
     }
+
+    /**
+     * Checks if the current entity is a Subscriber.
+     *
+     * @return true if the entity is a Subscriber, otherwise false.
+     */
     public boolean isSubscriber() {
-        return this.isSubscriber;
+        List<DTNHost> getSubscriber = SimScenario.getInstance().getSubscriber();
+        if (getSubscriber == null) {
+            return false;
+        }
+        return true;
     }
 
-    public List<Double> getInterest() {
-        return interest;
-    }
-    public void setInterest(List<Double> newInterest) {
-        interest = newInterest;
-    }
-    public List<Boolean> getOwnInterest() {
-        return ownInterest;
+    /**
+     * Checks if the current entity is a Key Distribution Center (KDC).
+     *
+     * @return true if the entity is a KDC, otherwise false.
+     */
+    public boolean isKDC() {
+        List<DTNHost> getKDC = SimScenario.getInstance().getKdc();
+        if (getKDC == null) {
+            return false;
+        }
+        return true;
     }
 
+    /**
+     * Adds a message to the buffer of all hosts that use a MessageRouter.
+     *
+     * This method iterates through all hosts in the simulation scenario and
+     * checks if their router is an instance of MessageRouter. If so, it adds
+     * the given message to their message buffer.
+     *
+     * @param m The message to be added to the hosts' buffers.
+     */
+    public void addBufferToHost(Message m) {
+        for (DTNHost host : SimScenario.getInstance().getHosts()) {
+            if (host.getRouter() instanceof MessageRouter) {
+                MessageRouter router = (MessageRouter) host.getRouter();
+                router.addToMessages(m, false);
+            }
+        }
+    }
+
+
+    // ✅ **Retrieve the interest and attributes of a Subscriber**
+
+    /**
+     * Retrieves the interest levels of the Subscriber.
+     *
+     * @return A list of interest weights assigned to topics.
+     */
+    public List<Double> getSocialProfile() {
+        return this.socialProfile;
+    }
+
+    /**
+     * Retrieves the topics the Subscriber is interested in.
+     *
+     * @return A list of boolean values representing topic interests.
+     */
+    public List<Boolean> getSocialProfileOI() {
+        return this.socialProfileOI;
+    }
+
+    /**
+     * Retrieves the numeric attribute range of the Subscriber.
+     *
+     * @return A list of TupleDe containing min-max values of the numeric attribute.
+     */
+    public List<TupleDe<Integer, Integer>> getNumericAtribute() {
+        return this.numericAtribute;
+    }
 
 
 }
