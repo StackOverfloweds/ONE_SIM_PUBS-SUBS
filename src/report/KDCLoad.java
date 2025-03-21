@@ -13,7 +13,7 @@ import java.util.Map;
 public class KDCLoad extends Report implements UpdateListener {
     private final Map<Double, Integer> KDCLoad = new LinkedHashMap<>();
     private double lastUpdate = 0;
-    private final double threshold = 300; // Interval 300 detik
+    private final double threshold = 120;
 
     public void updated(List<DTNHost> hosts) {
         if (isWarmup()) {
@@ -34,7 +34,10 @@ public class KDCLoad extends Report implements UpdateListener {
                         Map<DTNHost, Integer> kdcLoads = routing.getKDCLoad();
 
                         if (kdcLoads != null) {
-                            loadKDC += kdcLoads.size(); // Jumlah subscriber keys dalam interval ini
+                            for (Map.Entry<DTNHost, Integer> entry : kdcLoads.entrySet()) {
+                                int keyLoad = entry.getValue() != null ? entry.getValue() : 0;
+                                loadKDC += keyLoad; // Menjumlahkan total key yang dibuat oleh KDC
+                            }
                         }
                     }
                 }
@@ -52,7 +55,7 @@ public class KDCLoad extends Report implements UpdateListener {
         }
 
         StringBuilder status = new StringBuilder();
-        status.append("Waktu\tJumlah load kdc\n"); // Tambahkan header agar lebih jelas
+        status.append("Waktu\tJumlah Load KDC\n"); // Tambahkan header agar lebih jelas
 
         for (Map.Entry<Double, Integer> entry : KDCLoad.entrySet()) {
             status.append(entry.getKey()).append("\t").append(entry.getValue()).append("\n");

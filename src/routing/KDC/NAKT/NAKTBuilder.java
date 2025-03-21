@@ -2,6 +2,7 @@ package routing.KDC.NAKT;
 
 import core.DTNHost;
 import core.Message;
+import routing.CCDTN;
 import routing.KDC.Broker.GetAllBroker;
 import routing.util.TupleDe;
 
@@ -22,7 +23,7 @@ public class NAKTBuilder extends KeyManager {
         this.lcnum = lcnum;
         this.keyEncryption = new HashMap<>();
         this.keyAuthentication = new HashMap<>();
-        this.kdcLoad = new HashMap<>();
+        this.kdcLoad = CCDTN.kdcLoad != null ? CCDTN.kdcLoad : new HashMap<>();
     }
 
     /**
@@ -87,8 +88,6 @@ public class NAKTBuilder extends KeyManager {
             // i for the number of kdc create NAKT
             // Simpan data pemrosesan dalam `kdcLoad`
             kdcLoad.put(kdcHost,processCount);
-            // add propherty for calculate the kdcload
-            msg.addProperty("KDC_Load", kdcLoad);
         }
         return success;
     }
