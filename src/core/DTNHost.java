@@ -4,15 +4,14 @@
  */
 package core;
 
-import java.util.*;
-
-import input.MessageCreateEventNAKT;
 import movement.MovementModel;
 import movement.Path;
 import routing.MessageRouter;
 import routing.RoutingInfo;
 import routing.community.Duration;
 import routing.util.TupleDe;
+
+import java.util.*;
 
 /**
  * A DTN capable host.
@@ -53,15 +52,10 @@ public class DTNHost implements Comparable<DTNHost> {
     public double totalContactTime = 0;
 
     // crete variable for pubs-susb
-    private boolean isPublisher = false;
-    private boolean isBroker = false;
-    private boolean isSubscriber = false;
-    private boolean isKDC = false;
     // kdc is key distributed center for key management of content publisher
     private List<Double> socialProfile;
     private List<Boolean> socialProfileOI;
     private List<TupleDe<Integer, Integer>> numericAtribute; //min max atribute value of int
-
 
 
     static {
@@ -84,39 +78,16 @@ public class DTNHost implements Comparable<DTNHost> {
         this.comBus = comBus;
         this.location = new Coord(0, 0);
         this.address = getNextAddress();
+        this.name = groupId + address;
         this.net = new ArrayList<NetworkInterface>();
-
-        // create initial node
-        this.isPublisher = false;
-        this.isSubscriber = false;
-        this.isBroker = false;
-        this.isKDC = false;
-
-        // Create roles for Pub-Sub entities with group-based identification.
-        if (groupId.startsWith("S")) {
-            isSubscriber = true;
-            name = "Subscriber_" + groupId + "_" + address;
-        } else if (groupId.startsWith("P")) {
-            isPublisher = true;
-            name = "Publisher_" + groupId + "_" + address;
-        } else if (groupId.startsWith("B")) {
-            isBroker = true;
-            name = "Broker_" + groupId + "_" + address;
-        } else if (groupId.startsWith("K")) {
-            isKDC = true;
-            name = "KDC_" + groupId + "_" + address;
-        } else {
-            // If GroupID does not match any predefined roles, throw an exception.
-            throw new IllegalArgumentException("Invalid GroupID: " + groupId);
-        }
-
         Random random = new Random();
 
         this.socialProfile = new ArrayList<>();
         this.socialProfileOI = new ArrayList<>();
         this.numericAtribute = new ArrayList<>();
+
         // ✅ **Initialize subscriber attributes if the entity is a subscriber**
-        if (isSubscriber) {
+        if (groupId.startsWith("S")) {
             int index = 0;
             while (index < 5) {
                 // ✅ **Randomly determine if numericAtribute should store a min-max range or default (0,0)**
@@ -135,8 +106,6 @@ public class DTNHost implements Comparable<DTNHost> {
             }
 
         }
-
-
         for (NetworkInterface i : interf) {
             NetworkInterface ni = i.replicate();
             ni.setHost(this);
@@ -642,7 +611,11 @@ public class DTNHost implements Comparable<DTNHost> {
      * @return true if the entity is a Publisher, otherwise false.
      */
     public boolean isPublisher() {
-        return this.isPublisher;
+        List<DTNHost> getPublisher = SimScenario.getInstance().getPublisher();
+        if (getPublisher == null) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -651,7 +624,11 @@ public class DTNHost implements Comparable<DTNHost> {
      * @return true if the entity is a Broker, otherwise false.
      */
     public boolean isBroker() {
-        return this.isBroker;
+        List<DTNHost> getBroker = SimScenario.getInstance().getBroker();
+        if (getBroker == null) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -660,7 +637,11 @@ public class DTNHost implements Comparable<DTNHost> {
      * @return true if the entity is a Subscriber, otherwise false.
      */
     public boolean isSubscriber() {
-        return this.isSubscriber;
+        List<DTNHost> getSubscriber = SimScenario.getInstance().getSubscriber();
+        if (getSubscriber == null) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -669,8 +650,31 @@ public class DTNHost implements Comparable<DTNHost> {
      * @return true if the entity is a KDC, otherwise false.
      */
     public boolean isKDC() {
-        return this.isKDC;
+        List<DTNHost> getKDC = SimScenario.getInstance().getKdc();
+        if (getKDC == null) {
+            return false;
+        }
+        return true;
     }
+
+    /**
+     * Adds a message to the buffer of all hosts that use a MessageRouter.
+     *
+     * This method iterates through all hosts in the simulation scenario and
+     * checks if their router is an instance of MessageRouter. If so, it adds
+     * the given message to their message buffer.
+     *
+     * @param m The message to be added to the hosts' buffers.
+     */
+    public void addBufferToHost(Message m) {
+        for (DTNHost host : SimScenario.getInstance().getHosts()) {
+            if (host.getRouter() instanceof MessageRouter) {
+                MessageRouter router = (MessageRouter) host.getRouter();
+                router.addToMessages(m, false);
+            }
+        }
+    }
+
 
     // ✅ **Retrieve the interest and attributes of a Subscriber**
 
@@ -700,8 +704,6 @@ public class DTNHost implements Comparable<DTNHost> {
     public List<TupleDe<Integer, Integer>> getNumericAtribute() {
         return this.numericAtribute;
     }
-
-
 
 
 }
