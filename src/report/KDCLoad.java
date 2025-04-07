@@ -6,25 +6,29 @@ import core.UpdateListener;
 import routing.CCDTN;
 import routing.PublishAndSubscriberRouting;
 
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class KDCLoad extends Report implements UpdateListener {
-    private final Map<Double, Integer> KDCLoad = new LinkedHashMap<>();
+    private final List<int[]> kdcLoadTimeline = new ArrayList<>();
     private double lastUpdate = 0;
-    private final double threshold = 120;
+    private final double threshold = 900;
 
+    @Override
     public void updated(List<DTNHost> hosts) {
         if (isWarmup()) {
             return;
         }
+
         double currentTime = SimClock.getTime();
 
-        // Hanya mencatat jika sudah melewati threshold waktu
-        if ((currentTime - lastUpdate) >= threshold) {
+        if ((currentTime - lastUpdate) < threshold) {
+            return;
+        }
             lastUpdate = currentTime;
-            int loadKDC = 0;
+
+            Map<DTNHost, Integer> combinedKDCLoad = new java.util.HashMap<>();
 
             for (DTNHost host : hosts) {
                 if (host.getRouter() instanceof CCDTN) {
@@ -35,30 +39,35 @@ public class KDCLoad extends Report implements UpdateListener {
 
                         if (kdcLoads != null) {
                             for (Map.Entry<DTNHost, Integer> entry : kdcLoads.entrySet()) {
-                                int keyLoad = entry.getValue() != null ? entry.getValue() : 0;
-                                loadKDC += keyLoad; // Menjumlahkan total key yang dibuat oleh KDC
+                                combinedKDCLoad.merge(
+                                        entry.getKey(),
+                                        entry.getValue() != null ? entry.getValue() : 0,
+                                        Integer::sum
+                                );
                             }
                         }
                     }
                 }
             }
 
-            // Simpan jumlah keys dalam periode ini ke dalam LinkedHashMap (menjaga urutan waktu)
-            KDCLoad.put(currentTime, loadKDC);
-        }
+            // Hitung total load dari seluruh KDC
+            int totalLoad = combinedKDCLoad.values().stream().mapToInt(Integer::intValue).sum();
+
+            // Simpan waktu (dalam detik dibulatkan) dan total load
+            kdcLoadTimeline.add(new int[]{(int) currentTime, totalLoad});
     }
 
     @Override
     public void done() {
-        if (KDCLoad.isEmpty()) {
-            return; // Hindari menulis file kosong
+        if (kdcLoadTimeline.isEmpty()) {
+            return;
         }
 
         StringBuilder status = new StringBuilder();
-        status.append("Waktu\tJumlah Load KDC\n"); // Tambahkan header agar lebih jelas
+        status.append("Waktu\tJumlah Load KDC\n");
 
-        for (Map.Entry<Double, Integer> entry : KDCLoad.entrySet()) {
-            status.append(entry.getKey()).append("\t").append(entry.getValue()).append("\n");
+        for (int[] data : kdcLoadTimeline) {
+            status.append(data[0]).append("\t").append(data[1]).append("\n");
         }
 
         write(status.toString());

@@ -288,36 +288,143 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
         return new PublishAndSubscriberRouting(this);
     }
 
-    public Map<DTNHost, Integer> getKeys() {
+//    public Map<DTNHost, Integer> getKeys() {
+//        // Get the messages held by this host
+//        Collection<Message> msgCollection = getMessageCollection();
+//        if (msgCollection.isEmpty()) {
+//            return Collections.emptyMap(); // Return empty map if no messages
+//        }
+//
+//        // Get all current connections
+//        Collection<Connection> connections = getConnections();
+//        if (connections == null) {
+//            return Collections.emptyMap();
+//        }
+//
+//        // Map to store the total number of unique keys per subscriber
+//        Map<DTNHost, Integer> keyCounts = new HashMap<>();
+//
+//        // Map to track the unique keys already seen for each subscriber
+//        Map<DTNHost, Set<String>> seenKeys = new HashMap<>();
+//
+//        // Loop through each connection
+//        for (Connection con : connections) {
+//            DTNHost other = con.getOtherNode(getHost());
+//            PublishAndSubscriberRouting otherRouter = (PublishAndSubscriberRouting) other.getRouter();
+//
+//            // Skip if the node is currently transferring
+//            if (otherRouter.isTransferring()) {
+//                continue;
+//            }
+//
+//            // Skip if the other node is not a subscriber
+//            if (!other.isSubscriber()) {
+//                continue;
+//            }
+//
+//            // Loop through each message
+//            for (Message msg : msgCollection) {
+//                if (msg == null) {
+//                    continue;
+//                }
+//
+//                // Extract the message key authentication property
+//                Map<DTNHost, List<TupleDe<String, String>>> keyAuth =
+//                        (Map<DTNHost, List<TupleDe<String, String>>>) msg.getProperty(MESSAGE_KEY_AUTHENTICATION_S);
+//
+//                if (keyAuth != null) {
+//                    for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : keyAuth.entrySet()) {
+//                        DTNHost subscriber = entry.getKey();
+//                        List<TupleDe<String, String>> tuples = entry.getValue();
+//
+//                        if (tuples != null) {
+//                            // Get or create the set of keys already seen for this subscriber
+//                            Set<String> uniqueKeys;
+//                            if (seenKeys.containsKey(subscriber)) {
+//                                uniqueKeys = seenKeys.get(subscriber);
+//                            } else {
+//                                uniqueKeys = new HashSet<>();
+//                                seenKeys.put(subscriber, uniqueKeys);
+//                            }
+//
+//                            int newKeyCount = 0; // Count of new unique keys in this message
+//
+//                            for (TupleDe<String, String> tuple : tuples) {
+//                                String key = tuple.getSecond(); // Get the key string
+//
+//                                // Add key only if it's not seen before
+//                                if (!uniqueKeys.contains(key)) {
+//                                    uniqueKeys.add(key);
+//                                    newKeyCount++;
+//                                }
+//                            }
+//
+//                            // Update the count of keys for the subscriber
+//                            if (newKeyCount > 0) {
+//                                int currentCount = keyCounts.getOrDefault(subscriber, 0);
+//                                keyCounts.put(subscriber, currentCount + newKeyCount);
+//                            }
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//
+//        return keyCounts;
+//    }
 
-        // Get the message collection
+    public Map<DTNHost, Integer> getKeys() {
         Collection<Message> msgCollection = getMessageCollection();
         if (msgCollection.isEmpty()) {
-            return null;
+            return Collections.emptyMap();
         }
 
-        // Map untuk menyimpan jumlah total elemen dalam getKeyAuth untuk setiap host
+        Collection<Connection> connections = getConnections();
+        if (connections == null) {
+            return Collections.emptyMap();
+        }
+
         Map<DTNHost, Integer> keyCounts = new HashMap<>();
 
-        for (Message msg : msgCollection) {
-            if (msg == null) {
-                continue;
-            }
+        // Map to track the second values seen per subscriber (DTNHost)
+        Map<DTNHost, Set<String>> seenKeys = new HashMap<>();
 
-            // Ambil properti getKeyAuth dari message
-            Map<DTNHost, List<TupleDe<String, String>>> getKeyAuth =
+        for (Message msg : msgCollection) {
+            if (msg == null) continue;
+
+            Map<DTNHost, List<TupleDe<String, String>>> keyAuth =
                     (Map<DTNHost, List<TupleDe<String, String>>>) msg.getProperty(MESSAGE_KEY_AUTHENTICATION_S);
 
-            if (getKeyAuth != null) {
-                for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : getKeyAuth.entrySet()) {
-                    DTNHost dtnHost = entry.getKey();
+            if (keyAuth != null) {
+                for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : keyAuth.entrySet()) {
+                    DTNHost subscriber = entry.getKey();
                     List<TupleDe<String, String>> tuples = entry.getValue();
 
-                    // Hitung jumlah TupleDe dalam daftar
-                    int count = (tuples != null) ? tuples.size() : 0;
+                    if (tuples != null) {
+                        for (TupleDe<String, String> tuple : tuples) {
+                            String secondValue = tuple.getSecond();
+                            if (secondValue == null) continue;
 
-                    // Tambahkan ke dalam map
-                    keyCounts.put(dtnHost, count);
+                            // Get or create the set of seen second values for this subscriber
+                            Set<String> keysSeenForHost;
+                            if (seenKeys.containsKey(subscriber)) {
+                                keysSeenForHost = seenKeys.get(subscriber);
+                            } else {
+                                keysSeenForHost = new HashSet<>();
+                                seenKeys.put(subscriber, keysSeenForHost);
+                            }
+
+                            // Skip if this host already used this secondValue
+                            if (keysSeenForHost.contains(secondValue)) {
+                                continue;
+                            }
+
+                            // Otherwise, count and add
+                            keysSeenForHost.add(secondValue);
+                            keyCounts.put(subscriber, keyCounts.getOrDefault(subscriber, 0) + 1);
+                        }
+
+                    }
                 }
             }
         }
@@ -325,24 +432,23 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
         return keyCounts;
     }
 
+
+
     public Map<DTNHost, Integer> getKDCLoad() {
         if (kdcLoad == null || kdcLoad.isEmpty()) {
             return Collections.emptyMap(); // Hindari return null
         }
 
-        Map<DTNHost, Integer> getKDCLOAD = new HashMap<>();
+        Map<DTNHost, Integer> computedKDCLoad = new HashMap<>();
 
         for (Map.Entry<DTNHost, Integer> entry : kdcLoad.entrySet()) {
-            DTNHost dtnHost = entry.getKey();
-            Integer count = (entry.getValue() != null) ? entry.getValue() : 0;
-            getKDCLOAD.put(dtnHost, count);
+            DTNHost kdcHost = entry.getKey();
+            Integer loadCount = (entry.getValue() != null) ? entry.getValue() : 0;
+
+            computedKDCLoad.put(kdcHost, loadCount);
         }
 
-        return getKDCLOAD;
+        return computedKDCLoad;
     }
-
-
-
-
 
 }

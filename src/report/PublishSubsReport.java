@@ -17,7 +17,6 @@ public class PublishSubsReport extends Report implements MessageListener, Update
     private List<Double> rtt; // round trip times
 
     private int nrofDropped;
-    private int nrofRemoved;
     private int nrofStarted;
     private int nrofAborted;
     private int nrofRelayed;
@@ -25,6 +24,7 @@ public class PublishSubsReport extends Report implements MessageListener, Update
     private int nrofResponseReqCreated;
     private int nrofResponseDelivered;
     private int nrofDelivered;
+    private int nrofRemoved;
 
     @Override
     protected void init() {
@@ -36,7 +36,6 @@ public class PublishSubsReport extends Report implements MessageListener, Update
         this.rtt = new ArrayList<Double>();
 
         this.nrofDropped = 0;
-        this.nrofRemoved = 0;
         this.nrofStarted = 0;
         this.nrofAborted = 0;
         this.nrofRelayed = 0;
@@ -44,6 +43,8 @@ public class PublishSubsReport extends Report implements MessageListener, Update
         this.nrofResponseReqCreated = 0;
         this.nrofResponseDelivered = 0;
         this.nrofDelivered = 0;
+        this.nrofRemoved = 0;
+
     }
 
     public PublishSubsReport() {
@@ -93,7 +94,6 @@ public class PublishSubsReport extends Report implements MessageListener, Update
         else {
             this.nrofRemoved++;
         }
-
         this.msgBufferTime.add(getSimTime() - m.getReceiveTime());
     }
 
@@ -139,14 +139,15 @@ public class PublishSubsReport extends Report implements MessageListener, Update
         write("Messages Relayed: " + this.nrofRelayed);
         write("Messages Aborted: " + this.nrofAborted);
         write("Messages Dropped: " + this.nrofDropped);
-        write("Messages Removed: " + this.nrofRemoved);
         write("Messages Delivered: " + this.nrofDelivered);
 
         // Tampilkan probabilitas dan overhead
         write("\n=== Delivery Metrics ===");
         write("Delivery Probability: " + format(deliveryProb));
         write("Overhead Ratio: " + format(overHead));
-
+        write("latency_avg: " + getAverage(this.latencies));
+        write("latency_median: " + getMedian(this.latencies));
+        write("");
         // Footer untuk laporan
         write("=====================================================");
         write("End of Report");

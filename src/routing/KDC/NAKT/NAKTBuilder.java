@@ -37,7 +37,7 @@ public class NAKTBuilder extends KeyManager {
      */
     public boolean buildNAKT(List<DTNHost> kdcHosts, Message msg) {
         boolean success = false;
-        int i = 0;
+
         for (DTNHost kdcHost : kdcHosts) {
             if (!kdcHost.isKDC()) continue;
 
@@ -49,14 +49,14 @@ public class NAKTBuilder extends KeyManager {
             if (registerData == null || registerData.isEmpty() || getUnSubs == null || getUnSubs.isEmpty()) {
                 continue;
             }
-            int processCount = 0; // Jumlah proses yang dilakukan oleh KDC ini
+
+            int processCount = 0; // Jumlah operasi key derivation & distribusi kunci
             for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : registerData.entrySet()) {
                 DTNHost publisher = entry.getKey();
                 List<TupleDe<Boolean, Integer>> subscriberInfo = entry.getValue();
                 if (subscriberInfo == null || subscriberInfo.isEmpty()) continue;
 
-                TupleDe<Boolean, Integer> firstEntry = subscriberInfo.get(0);
-                boolean topicVal = firstEntry.getFirst();
+                boolean topicVal = subscriberInfo.get(0).getFirst();
 
                 for (Map.Entry<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> entrySubs : getUnSubs.entrySet()) {
                     DTNHost subscriber = entrySubs.getKey();
@@ -66,31 +66,38 @@ public class NAKTBuilder extends KeyManager {
                         List<TupleDe<Integer, Integer>> intPairsList = tuple.getSecond();
 
                         for (TupleDe<Integer, Integer> intPair : intPairsList) {
-                            int firstValue = intPair.getFirst();
                             int secondValue = intPair.getSecond();
 
-                            // Generate encryption keys for publisher if not already present
+                            // 🔹 Pastikan publisher hanya mendapatkan key sekali
                             if (!keyEncryption.containsKey(publisher)) {
                                 handleEncryption(publisher, topicVal, secondValue, msg);
+                                processCount++;
                             }
 
-                            // Generate authentication keys for subscriber if not already present
+                            // 🔹 Pastikan subscriber hanya mendapatkan key sekali
                             if (!keyAuthentication.containsKey(subscriber)) {
                                 handleAuthentication(subscriber, topicVal, secondValue, getUnSubs, msg);
+                                processCount++;
                             }
-                            processCount++; // Tambah jumlah proses
                         }
                     }
                 }
-                i++;
             }
-            success = true;
-            // i for the number of kdc create NAKT
-            // Simpan data pemrosesan dalam `kdcLoad`
-            kdcLoad.put(kdcHost,processCount);
+
+            // 🔹 Hanya simpan beban jika ada proses yang benar-benar terjadi
+            if (processCount > 0) {
+                if (kdcLoad.containsKey(kdcHost)) {
+                    kdcLoad.put(kdcHost, kdcLoad.get(kdcHost) + 1);
+                } else {
+                    kdcLoad.put(kdcHost, 1);
+                }
+                success = true;
+            }
         }
+
         return success;
     }
+
 
     private void handleEncryption(DTNHost publisher, boolean topicVal, int secondValue, Message msg) {
         String rootKey = generateRootKey(topicVal);
@@ -105,15 +112,20 @@ public class NAKTBuilder extends KeyManager {
                 .findFirst()
                 .orElse(null);
 
+        // 🔹 **Cek duplikasi sebelum memasukkan key**
         if (selectedKey != null) {
-            keyEncryption.put(publisher, selectedKey);
-            msg.addProperty("KDC_Key_Encryption_", keyEncryption);
+            if (!keyEncryption.containsKey(publisher) || !keyEncryption.get(publisher).equals(selectedKey)) {
+                keyEncryption.put(publisher, selectedKey);
+                msg.addProperty("KDC_Key_Encryption_", keyEncryption);
+            }
         }
+
         List<DTNHost> brokers = getAllBrokers();
         if (!brokers.isEmpty()) {
             addMessageToHostsAndForward(msg, brokers);
         }
     }
+
 
     private void handleAuthentication(DTNHost subscriber, boolean topicVal, int secondValue,
                                       Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> getUnSubs,
@@ -147,16 +159,21 @@ public class NAKTBuilder extends KeyManager {
                 }
             }
 
+            // 🔹 **Cek duplikasi sebelum memasukkan key**
             if (!derivedKeys.isEmpty()) {
-                keyAuthentication.put(subscriber, derivedKeys);
-                msg.addProperty("KDC_Key_Authentication_", keyAuthentication);
+                if (!keyAuthentication.containsKey(subscriber) || !keyAuthentication.get(subscriber).containsAll(derivedKeys)) {
+                    keyAuthentication.put(subscriber, derivedKeys);
+                    msg.addProperty("KDC_Key_Authentication_", keyAuthentication);
+                }
             }
+
             List<DTNHost> brokers = getAllBrokers();
             if (!brokers.isEmpty()) {
                 addMessageToHostsAndForward(msg, brokers);
             }
         }
     }
+
 
 
     /**
