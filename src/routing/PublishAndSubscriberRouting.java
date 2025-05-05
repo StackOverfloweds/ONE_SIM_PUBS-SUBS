@@ -22,6 +22,9 @@ import java.util.*;
 public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber, KDCLoad {
     // Namespace settings
     private static final String PUBSROUTING_NS = "PublishAndSubscriberRouting";
+    private double lastUpdate;
+    private double treshold = 900;
+    private Map<Integer, Integer> dummyMap; // Penyimpanan sementara
 
     /**
      * Constructor: Initializes PublishAndSubscriberRouting with settings, topic registration,
@@ -33,6 +36,8 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
         // Call the superclass constructor to initialize inherited fields
         super(s);
         Settings ccSettings = new Settings(PUBSROUTING_NS);
+        this.lastUpdate = 0;
+        this.dummyMap = new HashMap<>();
     }
 
     /**
@@ -43,6 +48,8 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
     protected PublishAndSubscriberRouting(PublishAndSubscriberRouting r) {
         // Call the superclass copy constructor
         super(r);
+        this.lastUpdate = r.lastUpdate;
+        this.dummyMap = r.dummyMap;
     }
 
     /**
@@ -288,150 +295,37 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
         return new PublishAndSubscriberRouting(this);
     }
 
-//    public Map<DTNHost, Integer> getKeys() {
-//        // Get the messages held by this host
-//        Collection<Message> msgCollection = getMessageCollection();
-//        if (msgCollection.isEmpty()) {
-//            return Collections.emptyMap(); // Return empty map if no messages
-//        }
-//
-//        // Get all current connections
-//        Collection<Connection> connections = getConnections();
-//        if (connections == null) {
-//            return Collections.emptyMap();
-//        }
-//
-//        // Map to store the total number of unique keys per subscriber
-//        Map<DTNHost, Integer> keyCounts = new HashMap<>();
-//
-//        // Map to track the unique keys already seen for each subscriber
-//        Map<DTNHost, Set<String>> seenKeys = new HashMap<>();
-//
-//        // Loop through each connection
-//        for (Connection con : connections) {
-//            DTNHost other = con.getOtherNode(getHost());
-//            PublishAndSubscriberRouting otherRouter = (PublishAndSubscriberRouting) other.getRouter();
-//
-//            // Skip if the node is currently transferring
-//            if (otherRouter.isTransferring()) {
-//                continue;
-//            }
-//
-//            // Skip if the other node is not a subscriber
-//            if (!other.isSubscriber()) {
-//                continue;
-//            }
-//
-//            // Loop through each message
-//            for (Message msg : msgCollection) {
-//                if (msg == null) {
-//                    continue;
-//                }
-//
-//                // Extract the message key authentication property
-//                Map<DTNHost, List<TupleDe<String, String>>> keyAuth =
-//                        (Map<DTNHost, List<TupleDe<String, String>>>) msg.getProperty(MESSAGE_KEY_AUTHENTICATION_S);
-//
-//                if (keyAuth != null) {
-//                    for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : keyAuth.entrySet()) {
-//                        DTNHost subscriber = entry.getKey();
-//                        List<TupleDe<String, String>> tuples = entry.getValue();
-//
-//                        if (tuples != null) {
-//                            // Get or create the set of keys already seen for this subscriber
-//                            Set<String> uniqueKeys;
-//                            if (seenKeys.containsKey(subscriber)) {
-//                                uniqueKeys = seenKeys.get(subscriber);
-//                            } else {
-//                                uniqueKeys = new HashSet<>();
-//                                seenKeys.put(subscriber, uniqueKeys);
-//                            }
-//
-//                            int newKeyCount = 0; // Count of new unique keys in this message
-//
-//                            for (TupleDe<String, String> tuple : tuples) {
-//                                String key = tuple.getSecond(); // Get the key string
-//
-//                                // Add key only if it's not seen before
-//                                if (!uniqueKeys.contains(key)) {
-//                                    uniqueKeys.add(key);
-//                                    newKeyCount++;
-//                                }
-//                            }
-//
-//                            // Update the count of keys for the subscriber
-//                            if (newKeyCount > 0) {
-//                                int currentCount = keyCounts.getOrDefault(subscriber, 0);
-//                                keyCounts.put(subscriber, currentCount + newKeyCount);
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//
-//        return keyCounts;
-//    }
-
     public Map<DTNHost, Integer> getKeys() {
-        Collection<Message> msgCollection = getMessageCollection();
-        if (msgCollection.isEmpty()) {
-            return Collections.emptyMap();
+        if (numberKeyLoad == null || numberKeyLoad.isEmpty()) {
+            return null;
         }
 
-        Collection<Connection> connections = getConnections();
-        if (connections == null) {
-            return Collections.emptyMap();
-        }
-
-        Map<DTNHost, Integer> keyCounts = new HashMap<>();
-
-        // Map to track the second values seen per subscriber (DTNHost)
-        Map<DTNHost, Set<String>> seenKeys = new HashMap<>();
-
-        for (Message msg : msgCollection) {
-            if (msg == null) continue;
-
-            Map<DTNHost, List<TupleDe<String, String>>> keyAuth =
-                    (Map<DTNHost, List<TupleDe<String, String>>>) msg.getProperty(MESSAGE_KEY_AUTHENTICATION_S);
-
-            if (keyAuth != null) {
-                for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : keyAuth.entrySet()) {
-                    DTNHost subscriber = entry.getKey();
-                    List<TupleDe<String, String>> tuples = entry.getValue();
-
-                    if (tuples != null) {
-                        for (TupleDe<String, String> tuple : tuples) {
-                            String secondValue = tuple.getSecond();
-                            if (secondValue == null) continue;
-
-                            // Get or create the set of seen second values for this subscriber
-                            Set<String> keysSeenForHost;
-                            if (seenKeys.containsKey(subscriber)) {
-                                keysSeenForHost = seenKeys.get(subscriber);
-                            } else {
-                                keysSeenForHost = new HashSet<>();
-                                seenKeys.put(subscriber, keysSeenForHost);
-                            }
-
-                            // Skip if this host already used this secondValue
-                            if (keysSeenForHost.contains(secondValue)) {
-                                continue;
-                            }
-
-                            // Otherwise, count and add
-                            keysSeenForHost.add(secondValue);
-                            keyCounts.put(subscriber, keyCounts.getOrDefault(subscriber, 0) + 1);
-                        }
-
-                    }
-                }
+        // Mengembalikan mapping jumlahKey -> jumlahSubscriber
+        Map<DTNHost, Integer> result = new HashMap<>();
+        for (Map.Entry<DTNHost, Integer> entry : numberKeyLoad.entrySet()) {
+            DTNHost subscriber = entry.getKey();     // jumlah key
+            Integer keyCount = entry.getValue(); // jumlah subscriber
+            if (keyCount != null && subscriber != null) {
+                result.put(subscriber, keyCount);
             }
         }
-
-        return keyCounts;
+        return result;
     }
 
+    public Map<DTNHost, Integer> getKeysPublisher() {
+        if (numberKeyLoadPublisher == null || numberKeyLoadPublisher.isEmpty()) {
+            return null;
+        }
+        Map<DTNHost, Integer> result = new HashMap<>();
+        for (Map.Entry<DTNHost, Integer> entry : numberKeyLoadPublisher.entrySet()) {
+            DTNHost publisher = entry.getKey();
+            Integer keyCount = entry.getValue();
+            if (keyCount != null && publisher != null) {
+                result.put(publisher, keyCount);
+            }
+        }
+        return  result;
+    }
 
 
     public Map<DTNHost, Integer> getKDCLoad() {

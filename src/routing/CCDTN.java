@@ -28,7 +28,8 @@ public class CCDTN extends ActiveRouter {
     public static final String MESSAGE_KEY_AUTHENTICATION_S = "KDC_Key_Authentication_";
 
     public static Map<DTNHost, Integer> kdcLoad;
-
+    public static Map<DTNHost, Integer> numberKeyLoad;
+    public static Map<DTNHost, Integer> numberKeyLoadPublisher;
     // Maps to store connection timestamps and history
     protected Map<DTNHost, Double> startTimestamps;
     protected Map<DTNHost, List<Duration>> connHistory;
@@ -48,6 +49,8 @@ public class CCDTN extends ActiveRouter {
         this.startTimestamps = new HashMap<>();
         this.connHistory = new HashMap<>();
         this.kdcLoad = new HashMap<>();
+        this.numberKeyLoad = new HashMap<>();
+        this.numberKeyLoadPublisher = new HashMap<>();
     }
 
     /**
@@ -61,6 +64,8 @@ public class CCDTN extends ActiveRouter {
         startTimestamps = new HashMap<>(c.startTimestamps);
         connHistory = new HashMap<>(c.connHistory);
         kdcLoad = new HashMap<>(c.kdcLoad);
+        numberKeyLoad = new HashMap<>(c.numberKeyLoad);
+        numberKeyLoadPublisher = new HashMap<>(c.numberKeyLoadPublisher);
     }
 
     private void initNAKT() {
@@ -217,7 +222,7 @@ public class CCDTN extends ActiveRouter {
                 continue;
             }
 
-            for (DTNHost host : SimScenario.getInstance().getSubscriber()) {
+            for (DTNHost host : SimScenario.getInstance().getHosts()) {
                     if (host.equals(subscriberId)) {
                         TupleDe<String, String> decryptedContent = DecryptUtil.decryptMessage(msgEncrypt, keyList);
 //                        System.out.println("dekrip : "+decryptedContent);

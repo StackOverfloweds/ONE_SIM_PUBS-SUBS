@@ -10,7 +10,7 @@ public class GetAllKDC {
 
     public List<DTNHost> getAllKDCs() {
         List<DTNHost> kdcList = new ArrayList<>();
-        for (DTNHost host : SimScenario.getInstance().getKdc()) { // Jika ada metode untuk mendapatkan semua host
+        for (DTNHost host : SimScenario.getInstance().getHosts()) { // Jika ada metode untuk mendapatkan semua host
             if (host.isKDC()) {
                 kdcList.add(host);
             }

@@ -2,7 +2,7 @@
 Scenario.name = PUBS_SUBS
 Scenario.simulateConnections = true
 Scenario.updateInterval = 0.1
-Scenario.endTime = 43200
+Scenario.endTime = 274883
 
 # 274883
 
@@ -132,6 +132,7 @@ Report.reportDir = reports/PublishAndSubscribe
 Report.report1 = PublishSubsReport
 Report.report2 = SubscriberGetKey
 Report.report3 = KDCLoad
+# Report.report4 = PublisherGetKey
 # Report.report4 = DeliveredIntervalTracker
 
 # Optimization settings

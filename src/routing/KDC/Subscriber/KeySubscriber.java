@@ -8,4 +8,6 @@ public interface KeySubscriber {
 
     // get number of key of subscriber
     Map<DTNHost, Integer> getKeys();
+
+    Map<DTNHost, Integer> getKeysPublisher();
 }

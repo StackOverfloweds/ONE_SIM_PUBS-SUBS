@@ -5,11 +5,15 @@ import core.SimScenario;
 import routing.CCDTN;
 import routing.PublishAndSubscriberRouting;
 
-import java.util.*;
-import java.io.*;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-public class SubscriberGetKey extends Report {
-
+public class PublisherGetKey extends Report{
     private List<String> csvData = new ArrayList<>();
 
     @Override
@@ -17,13 +21,13 @@ public class SubscriberGetKey extends Report {
         List<DTNHost> hosts = SimScenario.getInstance().getHosts();
         Map<DTNHost, Integer> aggregatedKeys = new HashMap<>();
 
-        write("Subscriber\t TotalKeysPerSubscriber\n");
+        write("Publisher\t TotalKeysPerPublisher\n");
         for (DTNHost host : hosts) {
             if (host.getRouter() instanceof CCDTN) {
                 CCDTN router = (CCDTN) host.getRouter();
                 if (router instanceof PublishAndSubscriberRouting) {
                     PublishAndSubscriberRouting routing = (PublishAndSubscriberRouting) router;
-                    Map<DTNHost, Integer> localKeys = routing.getKeys();
+                    Map<DTNHost, Integer> localKeys = routing.getKeysPublisher();
 
                     if (localKeys != null) {
                         for (Map.Entry<DTNHost, Integer> entry : localKeys.entrySet()) {
@@ -97,10 +101,10 @@ public class SubscriberGetKey extends Report {
     }
 
     private void exportToCSV() {
-        String csvFilename = "SubscriberGetKey.csv";
+        String csvFilename = "PublisherGetKey.csv";
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFilename))) {
-            writer.write("Subscriber,NumberKeysPerSubscriber\n");
+            writer.write("Publisher,NumberKeysPerPublisher\n");
             for (String line : csvData) {
                 writer.write(line);
                 writer.newLine();
