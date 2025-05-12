@@ -1,9 +1,11 @@
 package routing.KDC.Publisher;
 
+import core.Connection;
 import core.DTNHost;
 import core.Message;
-import routing.KDC.Broker.GetAllBroker;
+import core.SimScenario;
 import routing.KDC.GetAllKDC;
+import routing.PublishAndSubscriberRouting;
 import routing.util.TupleDe;
 
 import java.util.*;
@@ -14,31 +16,52 @@ public class Register {
      * Sends a registration message if the host is a publisher.
      * Registers the publisher with a set of unique topics and sends the data to KDC if brokers exist.
      *
-     * @param from The DTNHost attempting to register.
+     * @param host The DTNHost attempting to register.
      * @param m    The message to which registration data will be added.
      * @return true if registration is successful, false otherwise.
      */
-    public boolean sendMsgForRegistration(DTNHost from, Message m) {
-        if (!from.isPublisher()) {
+    public boolean sendMsgForRegistration(DTNHost host, Message m) {
+        if (!host.isPublisher()) {
             return false;
         }
-
-        List<DTNHost> brokers = getAllBrokers();
-        if (brokers.isEmpty()) {
+        Collection<Connection> connections = host.getConnections();
+        if (connections == null) {
             return false;
         }
-
-        List<DTNHost> kdcs = getAllKDCs();
         Set<TupleDe<Boolean, Integer>> uniqueTopics = generateUniqueTopics();
         Map<DTNHost, List<TupleDe<Boolean, Integer>>> setTop = new HashMap<>();
-        setTop.put(from, new ArrayList<>(uniqueTopics));
-
-        m.addProperty("KDC_Register_", setTop);
-        addMessageToHosts(m, brokers);
-        addMessageToHosts(m, kdcs);
-
-        return !kdcs.isEmpty();
+        setTop.put(host, new ArrayList<>(uniqueTopics));
+        for (Connection con : connections) {
+            DTNHost other = con.getOtherNode(host);
+            if (other != null && other.isBroker()) {
+                m.addProperty("KDC_Register_", setTop);
+                addMessageToHosts(m, other);
+                // Call the new method to handle sending to KDCs
+                return sendToKDCs(m);
+            }
+        }
+        return false;
     }
+
+    /**
+     * Sends a message to KDCs if the broker is a KDC.
+     *
+     * @param m      The message to send.
+     * @return true if message sent to KDCs, false otherwise.
+     */
+    private boolean sendToKDCs(Message m) {
+        for (DTNHost host : SimScenario.getInstance().getHosts()) {
+            for (Connection con : host.getConnections()) {
+                DTNHost other = con.getOtherNode(host);
+                if (other != null && other.isKDC()) {
+                    addMessageToHosts(m, other);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
 
     /**
      * Generates a set of unique topics, each represented by a boolean and an integer value.
@@ -60,32 +83,12 @@ public class Register {
     }
 
     /**
-     * Retrieves a list of all available brokers.
-     *
-     * @return A list of DTNHost instances representing brokers.
-     */
-    private List<DTNHost> getAllBrokers() {
-        return new GetAllBroker().getAllBrokers();
-    }
-
-    /**
-     * Retrieves a list of all available KDCs (Key Distribution Centers).
-     *
-     * @return A list of DTNHost instances representing KDCs.
-     */
-    private List<DTNHost> getAllKDCs() {
-        return new GetAllKDC().getAllKDCs();
-    }
-
-    /**
      * Adds the given message to the buffers of the provided hosts.
      *
      * @param m     The message to be added.
      * @param hosts The list of hosts to which the message should be added.
      */
-    private void addMessageToHosts(Message m, List<DTNHost> hosts) {
-        for (DTNHost host : hosts) {
-            host.addBufferToHost(m);
-        }
+    private void addMessageToHosts(Message m, DTNHost hosts) {
+        hosts.addBufferToHost(m);
     }
 }

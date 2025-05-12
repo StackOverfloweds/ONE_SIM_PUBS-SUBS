@@ -23,6 +23,7 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
     // Namespace settings
     private static final String PUBSROUTING_NS = "PublishAndSubscriberRouting";
 
+
     /**
      * Constructor: Initializes PublishAndSubscriberRouting with settings, topic registration,
      * encryption, and subscriber authentication details.
@@ -33,6 +34,7 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
         // Call the superclass constructor to initialize inherited fields
         super(s);
         Settings ccSettings = new Settings(PUBSROUTING_NS);
+
     }
 
     /**
@@ -55,62 +57,66 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
      */
     @Override
     public boolean createNewMessage(Message msg) {
-        // Ambil properti pesan
-        Map<DTNHost, TupleDe<String, String>> getKeyEnc =
-                (Map<DTNHost, TupleDe<String, String>>) msg.getProperty(MESSAGE_KEY_ENCRYPTION_S);
+        for (DTNHost host : SimScenario.getInstance().getHosts()) {
+            if (host.isPublisher()) {
 
-        Map<DTNHost, List<TupleDe<Boolean, Integer>>> getTopPubs =
-                (Map<DTNHost, List<TupleDe<Boolean, Integer>>>) msg.getProperty(MESSAGE_REGISTER_S);
+                // Ambil properti pesan
+                Map<DTNHost, TupleDe<String, String>> getKeyEnc =
+                        (Map<DTNHost, TupleDe<String, String>>) msg.getProperty(MESSAGE_KEY_ENCRYPTION_S);
 
-        // Validasi data
-        if (getKeyEnc == null || getKeyEnc.isEmpty() || getTopPubs == null || getTopPubs.isEmpty()) {
-            return false;
-        }
+                Map<DTNHost, List<TupleDe<Boolean, Integer>>> getTopPubs =
+                        (Map<DTNHost, List<TupleDe<Boolean, Integer>>>) msg.getProperty(MESSAGE_REGISTER_S);
 
-        boolean success = false;
+                // Validasi data
+                if (getKeyEnc == null || getKeyEnc.isEmpty() || getTopPubs == null || getTopPubs.isEmpty()) {
+                    return false;
+                }
+                boolean success = false;
+                System.out.println("mulai");
+                for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entryTop : getTopPubs.entrySet()) {
+                    DTNHost pubsId = entryTop.getKey();
+                    List<TupleDe<Boolean, Integer>> values = entryTop.getValue();
 
-        for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entryTop : getTopPubs.entrySet()) {
-            DTNHost pubsId = entryTop.getKey();
-            List<TupleDe<Boolean, Integer>> values = entryTop.getValue();
+                    // 🛑 Cek apakah list values kosong
+                    if (values == null || values.isEmpty()) {
+                        continue;
+                    }
 
-            // 🛑 Cek apakah list values kosong
-            if (values == null || values.isEmpty()) {
-                continue;
-            }
+                    TupleDe<Boolean, Integer> topPub = values.get(0); // topic sub-topic publisher
 
-            TupleDe<Boolean, Integer> topPub = values.get(0); // topic sub-topic publisher
+                    // Ambil langsung sebagai TupleDe
+                    TupleDe<String, String> keyPub = getKeyEnc.get(pubsId);
 
-            // Ambil langsung sebagai TupleDe
-            TupleDe<String, String> keyPub = getKeyEnc.get(pubsId);
-
-            if (keyPub == null) {
-                continue;
-            }
+                    if (keyPub == null) {
+                        continue;
+                    }
 
 //            System.out.println("pub id : " + pubsId);
 
-            // Generate random message
-            String randomMessage = "abcdefghijABCDEFGHIJ"; // 20 karakter
-            String hashedMessage = EncryptionUtil.encryptMessage(randomMessage, keyPub.getSecond());
+                    // Generate random message
+                    String randomMessage = "abcdefghijABCDEFGHIJ"; // 20 karakter
+                    String hashedMessage = EncryptionUtil.encryptMessage(randomMessage, keyPub.getSecond());
 
-            Map<Boolean, TupleDe<Integer, String>> messageData = new HashMap<>();
-            messageData.put(topPub.getFirst(), new TupleDe<>(topPub.getSecond(), hashedMessage));
+                    Map<Boolean, TupleDe<Integer, String>> messageData = new HashMap<>();
+                    messageData.put(topPub.getFirst(), new TupleDe<>(topPub.getSecond(), hashedMessage));
 
 //            System.out.println("get msg before encryption: " + randomMessage);
 //            System.out.println("get key encryption: " + keyPub.getSecond());
 //            System.out.println("get msg after encryption: " + hashedMessage);
 
-            makeRoomForMessage(msg.getSize());
-            msg.setTtl(this.msgTtl);
-            msg.addProperty(MESSAGE_TOPICS_S, messageData);
-            addToMessages(msg, true); // new msg add to buffer
-            if (sendForPublishing(msg)) {
-//                System.out.println("success create msg with encrypt" + msg.getProperty(MESSAGE_TOPICS_S));
-                success = true;
+                    makeRoomForMessage(msg.getSize());
+                    msg.setTtl(this.msgTtl);
+                    msg.addProperty(MESSAGE_TOPICS_S, messageData);
+                    addToMessages(msg, true); // new msg add to buffer
+                    if (sendForPublishing(msg)) {
+                System.out.println("success create msg with encrypt" + msg.getProperty(MESSAGE_TOPICS_S));
+                        success = true;
+                    }
+                }
+                return success;
             }
         }
-
-        return success;
+        return false;
     }
 
 
@@ -289,60 +295,38 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
     }
 
     public Map<DTNHost, Integer> getKeys() {
-
-        // Get the message collection
-        Collection<Message> msgCollection = getMessageCollection();
-        if (msgCollection.isEmpty()) {
-            return null;
+        if (numberKeyLoad == null || numberKeyLoad.isEmpty()) {
+            return Collections.emptyMap(); // Return an empty map instead of null
         }
 
-        // Map untuk menyimpan jumlah total elemen dalam getKeyAuth untuk setiap host
-        Map<DTNHost, Integer> keyCounts = new HashMap<>();
-
-        for (Message msg : msgCollection) {
-            if (msg == null) {
-                continue;
-            }
-
-            // Ambil properti getKeyAuth dari message
-            Map<DTNHost, List<TupleDe<String, String>>> getKeyAuth =
-                    (Map<DTNHost, List<TupleDe<String, String>>>) msg.getProperty(MESSAGE_KEY_AUTHENTICATION_S);
-
-            if (getKeyAuth != null) {
-                for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : getKeyAuth.entrySet()) {
-                    DTNHost dtnHost = entry.getKey();
-                    List<TupleDe<String, String>> tuples = entry.getValue();
-
-                    // Hitung jumlah TupleDe dalam daftar
-                    int count = (tuples != null) ? tuples.size() : 0;
-
-                    // Tambahkan ke dalam map
-                    keyCounts.put(dtnHost, count);
-                }
+        // Returns a mapping from subscriber (DTNHost) to the number of keys
+        Map<DTNHost, Integer> result = new HashMap<>();
+        for (Map.Entry<DTNHost, Integer> entry : numberKeyLoad.entrySet()) {
+            DTNHost subscriber = entry.getKey();   // The subscriber (host)
+            Integer keyCount = entry.getValue();   // Number of keys for the subscriber
+            if (subscriber != null && keyCount != null) {
+                result.put(subscriber, keyCount);
             }
         }
-
-        return keyCounts;
+        return result;
     }
+
 
     public Map<DTNHost, Integer> getKDCLoad() {
         if (kdcLoad == null || kdcLoad.isEmpty()) {
             return Collections.emptyMap(); // Hindari return null
         }
 
-        Map<DTNHost, Integer> getKDCLOAD = new HashMap<>();
+        Map<DTNHost, Integer> computedKDCLoad = new HashMap<>();
 
         for (Map.Entry<DTNHost, Integer> entry : kdcLoad.entrySet()) {
-            DTNHost dtnHost = entry.getKey();
-            Integer count = (entry.getValue() != null) ? entry.getValue() : 0;
-            getKDCLOAD.put(dtnHost, count);
+            DTNHost kdcHost = entry.getKey();
+            Integer loadCount = (entry.getValue() != null) ? entry.getValue() : 0;
+
+            computedKDCLoad.put(kdcHost, loadCount);
         }
 
-        return getKDCLOAD;
+        return computedKDCLoad;
     }
-
-
-
-
 
 }
