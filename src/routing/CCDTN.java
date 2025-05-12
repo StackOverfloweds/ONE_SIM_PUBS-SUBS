@@ -174,33 +174,34 @@ public class CCDTN extends ActiveRouter {
             return false;
         }
 
-        for (Connection con : connections) {
-            DTNHost other = con.getOtherNode(host);
-            CCDTN othRouter = (CCDTN) other.getRouter();
+        for (DTNHost other : SimScenario.getInstance().getHosts()) {
+            for (Connection con : connections) {
+                DTNHost getSubscriber = con.getOtherNode(other);
+                if (getSubscriber.isSubscriber()) {
+                    List<Boolean> hostTopicNode = getSubscriber.getSocialProfileOI();
+                    Map<DTNHost, List<TupleDe<String, String>>> getKeyAuth = (Map<DTNHost, List<TupleDe<String, String>>>) m.getProperty(MESSAGE_KEY_AUTHENTICATION_S);
 
-            if (othRouter.isTransferring()) {
-                continue;
-            }
-            List<Boolean> hostTopicNode = other.getSocialProfileOI();
-            Map<DTNHost, List<TupleDe<String, String>>> getKeyAuth = (Map<DTNHost, List<TupleDe<String, String>>>) m.getProperty(MESSAGE_KEY_AUTHENTICATION_S);
+                    if (getKeyAuth == null || getKeyAuth.isEmpty()) {
+                        return false;
+                    }
 
-            if (getKeyAuth == null || getKeyAuth.isEmpty()) {
-                return false;
-            }
+                    Map<DTNHost, List<TupleDe<String, String>>> dummyKEYAUTH = getKeyAuth;
 
-
-            Map<DTNHost, List<TupleDe<String, String>>> dummyKEYAUTH = getKeyAuth;
-
-            if (hostTopicNode == null || hostTopicNode.isEmpty()) {
-                return false;
-            }
-            for (Map.Entry<Boolean, TupleDe<Integer, String>> entry : dummyMSGTOP.entrySet()) {
-                if (hostTopicNode.contains(entry.getKey())) {
-//                    System.out.println("its matched baybeee");
-                    return authenticateSubscriber(entry.getValue().getSecond(), dummyKEYAUTH);
+                    if (hostTopicNode == null || hostTopicNode.isEmpty()) {
+                        return false;
+                    }
+                    for (Map.Entry<Boolean, TupleDe<Integer, String>> entry : dummyMSGTOP.entrySet()) {
+                        if (hostTopicNode.contains(entry.getKey())) {
+                    System.out.println("its matched baybeee");
+                            return authenticateSubscriber(entry.getValue().getSecond(), dummyKEYAUTH);
+                        }
+                    }
                 }
+
             }
         }
+
+
         return false;
     }
 
@@ -223,28 +224,28 @@ public class CCDTN extends ActiveRouter {
             }
 
             for (DTNHost host : SimScenario.getInstance().getHosts()) {
-                    if (host.equals(subscriberId)) {
-                        TupleDe<String, String> decryptedContent = DecryptUtil.decryptMessage(msgEncrypt, keyList);
+                if (host.equals(subscriberId)) {
+                    TupleDe<String, String> decryptedContent = DecryptUtil.decryptMessage(msgEncrypt, keyList);
 //                        System.out.println("dekrip : "+decryptedContent);
-                        if (decryptedContent != null && !decryptedContent.getSecond().isEmpty()) {
-                            String decryptedMessage = decryptedContent.getSecond();
+                    if (decryptedContent != null && !decryptedContent.getSecond().isEmpty()) {
+                        String decryptedMessage = decryptedContent.getSecond();
 
-                            // Inisialisasi set lokal untuk subscriber jika belum ada
-                            receivedMessages.putIfAbsent(subscriberId, new HashSet<>());
+                        // Inisialisasi set lokal untuk subscriber jika belum ada
+                        receivedMessages.putIfAbsent(subscriberId, new HashSet<>());
 
-                            // Cek apakah subscriber sudah menerima pesan ini sebelumnya
-                            if (receivedMessages.get(subscriberId).contains(decryptedMessage)) {
+                        // Cek apakah subscriber sudah menerima pesan ini sebelumnya
+                        if (receivedMessages.get(subscriberId).contains(decryptedMessage)) {
 //                                System.out.println("⚠️ DUPLICATE WARNING: Subscriber " + subscriberId + " sudah menerima pesan ini sebelumnya!");
-                                continue; // Skip pesan yang duplikat
-                            }
+                            continue; // Skip pesan yang duplikat
+                        }
 
-                            // Tambahkan pesan ke daftar yang sudah diterima oleh subscriber ini
-                            receivedMessages.get(subscriberId).add(decryptedMessage);
+                        // Tambahkan pesan ke daftar yang sudah diterima oleh subscriber ini
+                        receivedMessages.get(subscriberId).add(decryptedMessage);
 
 //                            System.out.println("🔹 Message: " + decryptedMessage);
-                            return true;
-                        }
+                        return true;
                     }
+                }
 
             }
         }

@@ -1,8 +1,6 @@
 package routing.KDC.NAKT;
 
-import core.DTNHost;
-import core.Message;
-import core.SimClock;
+import core.*;
 import routing.CCDTN;
 import routing.KDC.Broker.GetAllBroker;
 import routing.util.TupleDe;
@@ -57,7 +55,6 @@ public class NAKTBuilder extends KeyManager {
                     (Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>>) msg.getProperty("KDC_Subscribe_");
 
             if (registerData == null || registerData.isEmpty() || getUnSubs == null || getUnSubs.isEmpty()) {
-                System.out.println("empyt");
                 continue;
             }
 
@@ -85,11 +82,11 @@ public class NAKTBuilder extends KeyManager {
                                 handleEncryption(publisher, topicVal, secondValue, msg);
                                 processCount++;
                             }
-
                             // 🔹 Ensure subscriber only gets a key once
                             if (!keyAuthentication.containsKey(subscriber)) {
                                 handleAuthentication(subscriber, topicVal, secondValue, getUnSubs, msg);
                                 processCount++;
+
                             }
                         }
                     }
@@ -98,7 +95,12 @@ public class NAKTBuilder extends KeyManager {
 
             // Save load count only if actual processing took place
             if (processCount > 0) {
-                kdcLoad.put(kdcHost, kdcLoad.getOrDefault(kdcHost, 0) + 1);
+                if (kdcLoad.containsKey(kdcHost)) {
+                    kdcLoad.put(kdcHost, kdcLoad.get(kdcHost) + processCount);
+                } else {
+                    kdcLoad.put(kdcHost, processCount);
+                    numKeyLoadPublisher.put(kdcHost, 0);
+                }
                 success = true;
             }
         }
@@ -123,12 +125,8 @@ public class NAKTBuilder extends KeyManager {
             if (!keyEncryption.containsKey(publisher) || !keyEncryption.get(publisher).equals(selectedKey)) {
                 keyEncryption.put(publisher, selectedKey);
                 msg.addProperty("KDC_Key_Encryption_", keyEncryption);
+                addMessageToHostsAndForward(msg);
             }
-        }
-
-        List<DTNHost> brokers = getAllBrokers();
-        if (!brokers.isEmpty()) {
-            addMessageToHostsAndForward(msg, brokers);
         }
     }
 
@@ -137,70 +135,77 @@ public class NAKTBuilder extends KeyManager {
     private void handleAuthentication(DTNHost subscriber, boolean topicVal, int secondValue,
                                       Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> getUnSubs,
                                       Message msg) {
-        List<TupleDe<String, String>> derivedKeys = new ArrayList<>();
+
+        // A set to store derived keys (ensures no duplicates in key list at this stage)
+        Set<TupleDe<String, String>> derivedKeysSet = new HashSet<>();
+
+        // Aggregate existing attributes for this subscriber
         List<TupleDe<Integer, Integer>> existingAttributes = new ArrayList<>();
         List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> unsubData = getUnSubs.get(subscriber);
+
         if (unsubData != null) {
             for (TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> unsubEntry : unsubData) {
                 existingAttributes.addAll(unsubEntry.getSecond());
             }
         }
 
+        // Only process if there are existing attributes
         if (!existingAttributes.isEmpty()) {
-            String rootKey = generateRootKey(topicVal);
+            String rootKey = generateRootKey(topicVal); // Generate root encryption key
             List<TupleDe<String, String>> keyList = new ArrayList<>();
             int maxRange = getNearestPowerOfTwo(secondValue) - 1;
 
+            // Generate the list of keys hierarchically using binary paths
             encryptTreeNodes(0, maxRange, rootKey, "", 1, keyList);
+
+            // Determine the needed key for each range in existingAttributes
             for (TupleDe<Integer, Integer> existingRange : existingAttributes) {
                 for (int i = existingRange.getFirst(); i <= existingRange.getSecond(); i++) {
                     for (TupleDe<String, String> keyTuple : keyList) {
-                        // Determine the range for binaryPath
                         TupleDe<Integer, Integer> nodeRange = getRangeFromBinaryPath(keyTuple.getFirst(), maxRange);
 
-                        // Check if i is within the range defined by nodeRange
+                        // Check if 'i' falls within the range of the binary path
                         if (i >= nodeRange.getFirst() && i <= nodeRange.getSecond()) {
                             String binaryPath = keyTuple.getFirst();
-                            // Convert i to binary format with appropriate length lcnum
                             String binaryI = String.format("%" + lcnum + "s", Integer.toBinaryString(i)).replace(' ', '0');
 
-                            // Check if binaryPath matches binaryI (exact match)
+                            // Add the key if the exact binary path matches
                             if (binaryI.equals(binaryPath)) {
-                                // If path matches, add keyTuple to derivedKeys
-                                if (!derivedKeys.contains(keyTuple)) {
-                                    derivedKeys.add(keyTuple);
-                                    break; // Stop after a match is found
-                                }
+                                derivedKeysSet.add(keyTuple);
+                                break; // No need to keep checking other keys for the same value
                             }
                         }
                     }
                 }
             }
 
-            // Now check if the subscriber already has the derivedKeys existing in keyAuthentication
-            if (keyAuthentication.containsKey(subscriber) && numberKeyLoad.containsKey(subscriber)) {
-                // Check if the derived keys already exist for the subscriber
-                List<TupleDe<String, String>> existingKeys = keyAuthentication.get(subscriber);
-                if (existingKeys != null && new HashSet<>(existingKeys).containsAll(derivedKeys)) {
-                    return; // Keys are the same; skip processing
-                }
-            }
+            // Convert the derived keys set to a list (should contain only unique keys at this point)
+            List<TupleDe<String, String>> derivedKeys = new ArrayList<>(derivedKeysSet);
 
-            // If derivedKeys are new or different, update keyAuthentication and numberKeyLoad
+            // Allow only one key to be assigned to the subscriber
+            // This ensures the subscriber only gets one key even if they match multiple ranges.
             if (!derivedKeys.isEmpty()) {
-                int derivedSize = derivedKeys.size();
-                keyAuthentication.put(subscriber, derivedKeys);
-                numberKeyLoad.put(subscriber, derivedSize);
-                msg.addProperty("KDC_Key_Authentication_", keyAuthentication);
-            }
+                TupleDe<String, String> selectedKey = derivedKeys.get(0); // Pick the first key (or any suitable criterion can be applied)
 
-            // Forward messages to all brokers
-            List<DTNHost> brokers = getAllBrokers();
-            if (!brokers.isEmpty()) {
-                addMessageToHostsAndForward(msg, brokers);
+                // Check if the subscriber already has the key to avoid duplicates
+                if (keyAuthentication.containsKey(subscriber)) {
+                    List<TupleDe<String, String>> existingKeys = keyAuthentication.get(subscriber);
+                    if (existingKeys != null && existingKeys.contains(selectedKey)) {
+                        return; // Subscriber already has the key; exit to avoid redundant processing
+                    }
+                }
+
+                // Update key mappings for the subscriber
+                keyAuthentication.put(subscriber, Collections.singletonList(selectedKey));
+                numberKeyLoad.put(subscriber, 1);
+
+                // Add the key authentication data to the message and forward
+                msg.addProperty("KDC_Key_Authentication_", keyAuthentication);
+                addMessageToHostsAndForward(msg);
             }
         }
     }
+
 
 
     private TupleDe<Integer, Integer> getRangeFromBinaryPath(String path, int maxRange) {
@@ -276,32 +281,48 @@ public class NAKTBuilder extends KeyManager {
      * Sends the message to brokers first, then forwards it to relevant hosts in keyEncryption and keyAuthentication.
      *
      * @param msg     The message to be sent.
-     * @param brokers The list of broker hosts.
      */
-    private void addMessageToHostsAndForward(Message msg, List<DTNHost> brokers) {
+    private void addMessageToHostsAndForward(Message msg) {
         // Send to all brokers first
-        for (DTNHost broker : brokers) {
-            broker.addBufferToHost(msg);
-        }
-
-        // Forward to hosts in keyEncryption (publishers)
-        for (Map.Entry<DTNHost, TupleDe<String, String>> entry : keyEncryption.entrySet()) {
-            entry.getKey().addBufferToHost(msg);
-        }
-
-        // Forward to hosts in keyAuthentication (subscribers)
-        for (Map.Entry<DTNHost, List<TupleDe<String, String>>> entry : keyAuthentication.entrySet()) {
-            entry.getKey().addBufferToHost(msg);
+        for (DTNHost host : SimScenario.getInstance().getHosts()) {
+            for (Connection con : host.getConnections()) {
+                DTNHost other = con.getOtherNode(host);
+                if (other != null && other.isBroker()) {
+                    if (msg.getProperty("KDC_Register_") != null) {
+                        other.addBufferToHost(msg);
+                        publisherForward(msg);
+                    }
+                    if (msg.getProperty("KDC_Subscribe_") != null) {
+                        other.addBufferToHost(msg);
+                    }
+                }
+            }
         }
     }
 
-    /**
-     * Retrieves a list of all available brokers.
-     *
-     * @return A list of DTNHost instances representing brokers.
-     */
-    private List<DTNHost> getAllBrokers() {
-        return new GetAllBroker().getAllBrokers();
+    private void publisherForward(Message msg) {
+        for (DTNHost host : SimScenario.getInstance().getHosts()) {
+            for (Connection con : host.getConnections()) {
+                DTNHost other = con.getOtherNode(host);
+                if (other != null) {
+                    if (msg.getProperty("KDC_Register_") != null && other.isPublisher()) {
+                        Map<DTNHost, TupleDe<String, String>> register =
+                                (Map<DTNHost, TupleDe<String, String>>) msg.getProperty("KDC_Register_");
+                        if (register.containsKey(other)) {
+                            other.addBufferToHost(msg);
+                        }
+                    }
+                    if (msg.getProperty("KDC_Subscribe_") != null) {
+                        Map<DTNHost, List<TupleDe<String, String>>> subscriber =
+                                (Map<DTNHost, List<TupleDe<String, String>>>) msg.getProperty("KDC_Subscribe_");
+                        if (subscriber.containsKey(other)) {
+                            other.addBufferToHost(msg);
+                        }
+                    }
+                }
+            }
+        }
     }
+
 }
 

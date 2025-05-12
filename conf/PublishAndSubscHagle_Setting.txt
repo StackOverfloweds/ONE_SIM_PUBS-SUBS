@@ -24,30 +24,33 @@ Group.nrofHosts = 97
 # Common settings for all groups
 Group.movementModel = RandomWalk
 Group.router = PublishAndSubscriberRouting
-Group.bufferSize = 50M
+Group.bufferSize = 5M
 Group.waitTime = 0, 120
 Group.nrofInterfaces = 1
 Group.interface1 = btInterface
-Group.speed = 0.5, 1.5
-Group.msgTtl = 1000
+Group.speed = 2.0, 3.0
+Group.msgTtl = 3600
 
 # Publisher Group (P) - Source of messages
 Group1.groupID = P
 Group1.movementModel = RandomWalk
 Group1.router = PublishAndSubscriberRouting
-Group1.nrofHosts = 34
+Group1.nrofHosts = 20
+Group1.bufferSize = 15M
 
 # Broker Group (B) - Message Forwarding
 Group2.groupID = B
 Group2.movementModel = RandomWalk
 Group2.router = PublishAndSubscriberRouting
-Group2.nrofHosts = 28
+Group2.nrofHosts = 30
+Group2.bufferSize = 128M
 
 # Subscriber Group (S) - Message Consumers
 Group3.groupID = S
 Group3.movementModel = RandomWalk
 Group3.router = PublishAndSubscriberRouting
-Group3.nrofHosts = 35
+Group3.nrofHosts = 10
+Group3.bufferSize = 50M
 
 # Key Distribution Center (KDC) - Manages Encryption Keys
 # Pojok Kiri Atas
@@ -99,6 +102,7 @@ Group9.router = PublishAndSubscriberRouting
 Group9.nrofHosts = 1
 
 
+
 ## Message creation parameters
 Events.nrof = 2
 Events1.class = ExternalEventsQueue
@@ -107,7 +111,7 @@ Events1.filePath = ./conf/Haggle3-Infocom5.csv
 Events2.class = MessageEventGeneratorNAKT
 Events2.interval = 290, 310
 Events2.size = 500k
-Events2.hosts = 0,97
+Events2.hosts = 0,71
 Events2.prefix = M
 Events2.time = 0, 274883
 Events2.lcnum = 4
@@ -119,7 +123,7 @@ Events2.lcnum = 4
 # 2320, 2480 (~ 1 texts/ hour)
 
 # Movement model settings
-MovementModel.rngSeed = 3
+MovementModel.rngSeed = 6
 MovementModel.worldSize = 300, 300
 MovementModel.warmup = 1000
 
@@ -128,12 +132,14 @@ MapBasedMovement.nrofMapFiles = 1
 MapBasedMovement.mapFile1 = data/roads.wkt
 
 # Reports
-Report.nrofReports = 3
+Report.nrofReports = 1
 Report.warmup = 0
 Report.reportDir = reports/PublishAndSubscribe
-Report.report1 = PublishSubsReport
-Report.report2 = SubscriberGetKey
-Report.report3 = KDCLoad
+Report.report1 = SubscriberGetKey
+# Report.report2 = KDCLoad
+# Report.report3 = KDCLoad
+# Report.report4 = PublisherGetKey
+# Report.report4 = DeliveredIntervalTracker
 
 # Optimization settings
 Optimization.cellSizeMult = 5

@@ -119,22 +119,26 @@ public class DTNHost implements Comparable<DTNHost> {
         // ✅ **Initialize subscriber attributes if the entity is a subscriber**
         if (isSubscriber) {
             int index = 0;
+
             while (index < 5) {
-                // ✅ **Randomly determine if numericAtribute should store a min-max range or default (0,0)**
+                // Randomly decide if numericAtribute should store a min-max range
                 if (random.nextBoolean()) {
-                    int min = random.nextInt(30); // Generate a random min value between 0 and 30
+                    int min = random.nextInt(29) + 1; // Generate a random min value between 1 and 30 (1-29 + 1)
                     int max = random.nextInt(30 - min) + min; // Generate max value between min and 30
                     numericAtribute.add(new TupleDe<>(min, max));
                     socialProfileOI.add(true);
-                    socialProfile.add(0.5); // weight true = 0.5
+                    socialProfile.add(0.5); // Weight `true` = 0.5
                 } else {
-                    numericAtribute.add(new TupleDe<>(0, 0)); // Default range (0,0)
-                    socialProfileOI.add(false);
-                    socialProfile.add(0.0); // weight true = 0.5
+                    // Generate a valid range with 'min == max' to avoid (0, 0) and ensure the range has non-zero values.
+                    int min = random.nextInt(29) + 1; // Generate a random min value between 1 and 30 (1-29 + 1)
+                    int max = random.nextInt(30 - min) + min; // Generate max value between min and 30
+                    numericAtribute.add(new TupleDe<>(min, max)); // Both min and max are set to the same value
+                    socialProfileOI.add(false); // Treat this as part of the range
+                    socialProfile.add(0.5); // Weight `true` = 0.5
                 }
+
                 index++;
             }
-
         }
         for (
                 NetworkInterface i : interf) {
@@ -337,6 +341,15 @@ public class DTNHost implements Comparable<DTNHost> {
         double bSize = router.getBufferSize();
         double freeBuffer = router.getFreeBufferSize();
         return 100 * ((bSize - freeBuffer) / bSize);
+    }
+
+    /**
+     * Returns the remaining buffer size of the host.
+     *
+     * @return The remaining buffer size
+     */
+    public int getRemainingBuffer() {
+        return router.getFreeBufferSize();
     }
 
     /**

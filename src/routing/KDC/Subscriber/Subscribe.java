@@ -12,7 +12,7 @@ import java.util.*;
 
 public class Subscribe {
     private Map<DTNHost, Integer> subscriptionCountMap = new HashMap<>();
-    private static final int SUBSCRIPTION_THRESHOLD = 5;  // Limit the number of subscriptions to 5
+    private static final int SUBSCRIPTION_THRESHOLD = 5;  // Limit the number of subscriptions to 20
 
     /**
      * Handles the subscription process for a given DTNHost.
@@ -81,59 +81,51 @@ public class Subscribe {
      * @return true if the message is successfully sent to KDCs, false otherwise.
      */
     private boolean sendMessageToKDCs(Message m, Map<DTNHost, List<TupleDe<Boolean, Integer>>> registeredTopics, Map<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> topicSubTopicMap) {
-        Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> hostDataMap = new HashMap<>();
-        boolean subscriptionSuccessful = false;
 
+
+        // Iterate over the topic-subtopic map
+        Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> hostDataMap = new HashMap<>();
         for (Map.Entry<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> entry : topicSubTopicMap.entrySet()) {
-            DTNHost subscriberID = entry.getKey();
+            DTNHost subscriberID = entry.getKey();  // Retrieve the DTNHost
             TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> tupleData = entry.getValue();
             List<Boolean> topicNode = tupleData.getFirst();
             List<TupleDe<Integer, Integer>> subTopics = tupleData.getSecond();
 
-            Set<Boolean> topicSet = new HashSet<>(topicNode);
+            Set<Boolean> topicSet = new HashSet<>(topicNode);  // Set of topics for this subscriber
+
+            // Populate hostDataMap for the subscriber
             hostDataMap.put(subscriberID, Collections.singletonList(tupleData));
 
+            // Process each connection to the KDC
             for (DTNHost kdc : SimScenario.getInstance().getHosts()) {
-                int currentSubscriptionCount;
-                if (subscriptionCountMap.containsKey(kdc)) {
-                    currentSubscriptionCount = subscriptionCountMap.get(kdc);
-                } else {
-                    currentSubscriptionCount = 0;
-                }
-
-                // Cek jika sudah melebihi threshold
+                // Check if the subscriber has reached the subscription threshold
+                int currentSubscriptionCount = subscriptionCountMap.getOrDefault(kdc, 0);
                 if (currentSubscriptionCount >= SUBSCRIPTION_THRESHOLD) {
-                    System.out.println("Subscription threshold reached for KDC: " + kdc.getAddress());
-                    continue;
+                    return false;
                 }
-
                 for (Connection con : kdc.getConnections()) {
                     DTNHost getKdc = con.getOtherNode(kdc);
                     if (getKdc != null && getKdc.isKDC()) {
+                        // For each registered topic, check if the topic matches
                         for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> registeredEntry : registeredTopics.entrySet()) {
                             for (TupleDe<Boolean, Integer> tuple : registeredEntry.getValue()) {
                                 if (topicSet.contains(tuple.getFirst())) {
-                                    // Proses subscription
+                                    // Add the host data to the message property
                                     m.addProperty("KDC_Subscribe_", hostDataMap);
                                     addMessageToHosts(m, getKdc);
-
-                                    // Tambah hitungan subscriber untuk KDC ini
-                                    subscriptionCountMap.put(kdc, currentSubscriptionCount + 1);
-                                    subscriptionSuccessful = true;
-
-                                    break; // Berhasil subscribe, lanjut ke subscriber berikutnya
+                                    // Increment the subscription count only once after successful subscription
+                                    subscriptionCountMap.put(getKdc, currentSubscriptionCount + 1);
+                                    return true; // Message successfully sent to KDC
                                 }
                             }
-                            if (subscriptionSuccessful) break;
                         }
                     }
-                    if (subscriptionSuccessful) break;
                 }
-                if (subscriptionSuccessful) break;
             }
+
         }
 
-        return subscriptionSuccessful;
+        return false; // No KDCs found or no matching topics
     }
 
 
