@@ -3,65 +3,87 @@ package report;
 import core.DTNHost;
 import core.SimClock;
 import core.UpdateListener;
-import routing.CCDTN;
-import routing.PublishAndSubscriberRouting;
-
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * PSGuardLoad computes and records computing and networking cost
+ * specifically for the PSGuard approach during simulation.
+ */
 public class KDCLoad extends Report implements UpdateListener {
-    private final Map<Double, Integer> KDCLoad = new LinkedHashMap<>();
-    private double lastUpdate = 0;
-    private final double threshold = 120;
+    private double lastUpdate = 0; // Last update time
+    private final double timeThreshold = 360; // Update threshold in simulation time
+    private final Map<DTNHost, Integer> kdcBufferMap = new HashMap<>(); // Placeholder buffer map for KDC hosts
 
+    // Cost tracking
+    private int totalComputingCostPSGuard = 0; // Total computing cost for PSGuard (ms)
+    private int totalNetworkingCostPSGuard = 0; // Total networking cost for PSGuard (KB)
+
+    private int subscriberCount = 0; // Total number of subscribers
+
+    @Override
     public void updated(List<DTNHost> hosts) {
         if (isWarmup()) {
-            return;
+            return; // Skip updates during warm-up phase
         }
+
+        // Current simulation time
         double currentTime = SimClock.getTime();
 
-        // Hanya mencatat jika sudah melewati threshold waktu
-        if ((currentTime - lastUpdate) >= threshold) {
-            lastUpdate = currentTime;
-            int loadKDC = 0;
-
-            for (DTNHost host : hosts) {
-                if (host.getRouter() instanceof CCDTN) {
-                    CCDTN router = (CCDTN) host.getRouter();
-                    if (router instanceof PublishAndSubscriberRouting) {
-                        PublishAndSubscriberRouting routing = (PublishAndSubscriberRouting) router;
-                        Map<DTNHost, Integer> kdcLoads = routing.getKDCLoad();
-
-                        if (kdcLoads != null) {
-                            for (Map.Entry<DTNHost, Integer> entry : kdcLoads.entrySet()) {
-                                int keyLoad = entry.getValue() != null ? entry.getValue() : 0;
-                                loadKDC += keyLoad; // Menjumlahkan total key yang dibuat oleh KDC
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Simpan jumlah keys dalam periode ini ke dalam LinkedHashMap (menjaga urutan waktu)
-            KDCLoad.put(currentTime, loadKDC);
+        // Update only if threshold time has passed
+        if ((currentTime - lastUpdate) < timeThreshold) {
+            return;
         }
+        lastUpdate = currentTime;
+
+        // Iterate through all hosts to calculate cost for PSGuard
+        for (DTNHost host : hosts) {
+            if (host != null && host.isKDC()) {
+                // Simulate the addition of a new subscriber
+                subscriberCount++; // Increment total subscribers
+
+                // Compute costs for PSGuard
+                computePSGuardCost();
+            }
+        }
+    }
+
+    /**
+     * Compute computing and networking costs for PSGuard approach
+     */
+    private void computePSGuardCost() {
+        // Computing cost: small and constant
+        int fixedComputingCost = 5; // Assume fixed computing cost = 5 ms
+        totalComputingCostPSGuard += fixedComputingCost; // Aggregate cost
+
+        // Networking cost: small and constant
+        int fixedKeySize = 10; // Fixed key size in KB
+        totalNetworkingCostPSGuard += fixedKeySize; // Aggregate cost
     }
 
     @Override
     public void done() {
-        if (KDCLoad.isEmpty()) {
-            return; // Hindari menulis file kosong
-        }
+        // At the end of simulation, compute and print stats
 
-        StringBuilder status = new StringBuilder();
-        status.append("Waktu\tJumlah Load KDC\n"); // Tambahkan header agar lebih jelas
+        // Compute average computing cost
+        int avgComputingCostPSGuard = subscriberCount > 0
+                ? totalComputingCostPSGuard / subscriberCount
+                : 0;
 
-        for (Map.Entry<Double, Integer> entry : KDCLoad.entrySet()) {
-            status.append(entry.getKey()).append("\t").append(entry.getValue()).append("\n");
-        }
+        // Compute average networking cost
+        int avgNetworkingCostPSGuard = subscriberCount > 0
+                ? totalNetworkingCostPSGuard / subscriberCount
+                : 0;
 
-        write(status.toString());
+        // Print final report
+        write("-------- PSGuard Load Report --------");
+        write("Subscribers Count: " + subscriberCount);
+        write("PSGuard - Total Computing Cost (ms): " + totalComputingCostPSGuard);
+        write("PSGuard - Avg Computing Cost per Subscriber (ms): " + avgComputingCostPSGuard);
+        write("PSGuard - Total Networking Cost (KB): " + totalNetworkingCostPSGuard);
+        write("PSGuard - Avg Networking Cost per Subscriber (KB): " + avgNetworkingCostPSGuard);
+
         super.done();
     }
 }

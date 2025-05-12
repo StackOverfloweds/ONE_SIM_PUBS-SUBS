@@ -1,66 +1,51 @@
 package report;
 
 import core.DTNHost;
-import core.SimClock;
 import core.SimScenario;
-import core.UpdateListener;
 import routing.CCDTN;
 import routing.PublishAndSubscriberRouting;
 
 import java.util.*;
+import java.io.*;
 
-public class SubscriberGetKey extends Report implements UpdateListener {
-    private final Map<Double, Integer> subscriberKeyCounts = new LinkedHashMap<>();
-    private double lastUpdate = 0;
-    private final double threshold = 120;
+public class SubscriberGetKey extends Report {
 
-    public void updated(List<DTNHost> hosts) {
-        if (isWarmup()) {
-            return;
-        }
-        double currentTime = SimClock.getTime();
+    @Override
+    public void done() {
+        List<DTNHost> hosts = SimScenario.getInstance().getHosts();
+        Map<DTNHost, Integer> aggregatedKeys = new HashMap<>();
+        int totalKeys = 0;
 
-        // Hanya mencatat jika sudah melewati threshold waktu
-        if ((currentTime - lastUpdate) >= threshold) {
-            lastUpdate = currentTime;
-            int totalKeys = 0;
+        write("Rata-Rata Total Key Per Subscriber\n");
 
-            for (DTNHost host : hosts) {
-                if (host.getRouter() instanceof CCDTN) {
-                    CCDTN router = (CCDTN) host.getRouter();
-                    if (router instanceof PublishAndSubscriberRouting) {
-                        PublishAndSubscriberRouting routing = (PublishAndSubscriberRouting) router;
-                        Map<DTNHost, Integer> localSubscribers = routing.getKeys();
+        for (DTNHost host : hosts) {
+            if (host.getRouter() instanceof CCDTN) {
+                CCDTN router = (CCDTN) host.getRouter();
+                if (router instanceof PublishAndSubscriberRouting) {
+                    PublishAndSubscriberRouting routing = (PublishAndSubscriberRouting) router;
+                    Map<DTNHost, Integer> localKeys = routing.getKeys();
 
-                        if (localSubscribers != null) {
-                            for (Map.Entry<DTNHost, Integer> entry : localSubscribers.entrySet()) {
-                                int getValue = entry.getValue() != null ? entry.getValue() : 0;
-                                totalKeys += getValue;
-                            }
+                    if (localKeys != null) {
+                        for (Map.Entry<DTNHost, Integer> entry : localKeys.entrySet()) {
+                            DTNHost subscriber = entry.getKey();
+                            Integer numberKey = entry.getValue();
+
+                            // Aggregate keys per subscriber
+                            aggregatedKeys.merge(subscriber, numberKey, Integer::sum);
+
+                            // Add to totalKeys
+                            totalKeys += numberKey;
                         }
                     }
                 }
             }
-
-            // Simpan jumlah keys dalam periode ini ke dalam LinkedHashMap (menjaga urutan waktu)
-            subscriberKeyCounts.put(currentTime, totalKeys);
         }
-    }
+        int totalSubscribers = aggregatedKeys.size();
+        int averageKeysPerSubscriber = totalSubscribers > 0
+                ? totalKeys / totalSubscribers
+                : 0;
+        write("Average Keys per Subscriber: " + averageKeysPerSubscriber + "\n");
 
-    @Override
-    public void done() {
-        if (subscriberKeyCounts.isEmpty()) {
-            return; // Hindari menulis file kosong
-        }
-
-        StringBuilder status = new StringBuilder();
-        status.append("Waktu\tJumlah Subscriber Keys\n"); // Tambahkan header agar lebih jelas
-
-        for (Map.Entry<Double, Integer> entry : subscriberKeyCounts.entrySet()) {
-            status.append(entry.getKey()).append("\t").append(entry.getValue()).append("\n");
-        }
-
-        write(status.toString());
         super.done();
     }
 }

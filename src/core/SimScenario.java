@@ -120,11 +120,6 @@ public class SimScenario implements Serializable {
 	/** Global application event listeners */
 	private List<ApplicationListener> appListeners;
 
-	protected List<DTNHost> publisher;
-	protected List<DTNHost>	broker;
-	protected List<DTNHost> subscriber;
-	protected List<DTNHost> kdc;
-
 
 	static {
 		DTNSim.registerForReset(SimScenario.class.getCanonicalName());
@@ -169,7 +164,7 @@ public class SimScenario implements Serializable {
 		
 		createHosts();
 		
-		this.world = new World(hosts, worldSizeX, worldSizeY, updateInterval, 
+		this.world = new World(hosts, worldSizeX, worldSizeY, updateInterval,
 				updateListeners, simulateConnections, 
 				eqHandler.getEventQueues());
 	}
@@ -332,10 +327,6 @@ public class SimScenario implements Serializable {
 	 */
 	protected void createHosts() {
 		this.hosts = new ArrayList<DTNHost>();
-		this.publisher = new ArrayList<DTNHost>();
-		this.broker = new ArrayList<DTNHost>();
-		this.subscriber = new ArrayList<DTNHost>();
-		this.kdc = new ArrayList<DTNHost>();
 
 		for (int i=1; i<=nrofGroups; i++) {
 			List<NetworkInterface> mmNetInterfaces = 
@@ -415,38 +406,9 @@ public class SimScenario implements Serializable {
 						mmProto, mRouterProto);
 				hosts.add(host);
 
-				if (gid.equalsIgnoreCase("P")) {
-					publisher.add(host);
-				}
-				if (gid.equalsIgnoreCase("B")) {
-					broker.add(host);
-				}
-				if (gid.equalsIgnoreCase("S")) {
-					subscriber.add(host);
-				}
-				if (gid.equalsIgnoreCase("K")) {
-					kdc.add(host);
-				}
 			}
 		}
 	}
-
-	public List<DTNHost> getPublisher() {
-		return this.publisher;
-	}
-
-	public List<DTNHost> getBroker() {
-		return this.broker;
-	}
-
-	public List<DTNHost> getSubscriber() {
-		return this.subscriber;
-	}
-	public List<DTNHost> getKdc() {
-		return this.kdc;
-	}
-
-
 
 	/**
 	 * Returns the list of nodes for this scenario.

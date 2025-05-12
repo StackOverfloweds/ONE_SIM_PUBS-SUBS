@@ -68,7 +68,7 @@ public class World {
 	/**
 	 * Constructor.
 	 */
-	public World(List<DTNHost> hosts, int sizeX, int sizeY, 
+	public World(List<DTNHost> hosts,  int sizeX, int sizeY,
 			double updateInterval, List<UpdateListener> updateListeners,
 			boolean simulateConnections, List<EventQueue> eventQueues) {
 		this.hosts = hosts;
