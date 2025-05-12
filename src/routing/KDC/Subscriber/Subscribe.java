@@ -1,13 +1,18 @@
 package routing.KDC.Subscriber;
 
+import core.Connection;
 import core.DTNHost;
 import core.Message;
+import core.SimScenario;
 import routing.KDC.Broker.GetAllBroker;
 import routing.KDC.GetAllKDC;
 import routing.util.TupleDe;
+
 import java.util.*;
 
 public class Subscribe {
+    private Map<DTNHost, Integer> subscriptionCountMap = new HashMap<>();
+    private static final int SUBSCRIPTION_THRESHOLD = 5;  // Limit the number of subscriptions to 20
 
     /**
      * Handles the subscription process for a given DTNHost.
@@ -34,15 +39,96 @@ public class Subscribe {
             return false;
         }
 
-        List<DTNHost> brokers = getAllBrokers();
-        List<DTNHost> kdcs = getAllKDCs();
-
-        if (brokers.isEmpty()) {
+        if (registeredTopics.isEmpty()) {
             return false;
         }
-
-        return processSubscription(m, other, registeredTopics, topicNode, subTopics, brokers, kdcs);
+        // Create the new Map structure to store topicNode and subTopics
+        Map<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> topicSubTopicMap = new HashMap<>();
+        topicSubTopicMap.put(other, new TupleDe<>(topicNode, subTopics));
+        return processSubscription(m, registeredTopics, topicSubTopicMap);
     }
+
+    /**
+     * Processes the subscription request by matching topics between the subscriber
+     * and registered topics. If a match is found, it registers the subscriber and
+     * forwards the subscription to brokers and KDCs.
+     *
+     * @param m                The message object containing subscription data.
+     * @param registeredTopics The list of registered topics.
+     * @return true if subscription is successful, false otherwise.
+     */
+    private boolean processSubscription(Message m,
+                                        Map<DTNHost, List<TupleDe<Boolean, Integer>>> registeredTopics,
+                                        Map<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> topicSubTopicMap) {
+
+        for (DTNHost broker : SimScenario.getInstance().getHosts()) {
+            for (Connection con : broker.getConnections()) {
+                // send msg to broker
+                DTNHost otherBroker = con.getOtherNode(broker);
+                if (otherBroker != null && otherBroker.isBroker()) {
+                    addMessageToHosts(m, otherBroker);
+                    return sendMessageToKDCs(m, registeredTopics, topicSubTopicMap);
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Sends the subscription message to KDCs connected to the given DTNHost.
+     *
+     * @param m     The message to send.
+     * @return true if the message is successfully sent to KDCs, false otherwise.
+     */
+    private boolean sendMessageToKDCs(Message m, Map<DTNHost, List<TupleDe<Boolean, Integer>>> registeredTopics, Map<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> topicSubTopicMap) {
+
+
+        // Iterate over the topic-subtopic map
+        Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> hostDataMap = new HashMap<>();
+        for (Map.Entry<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> entry : topicSubTopicMap.entrySet()) {
+            DTNHost subscriberID = entry.getKey();  // Retrieve the DTNHost
+            TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> tupleData = entry.getValue();
+            List<Boolean> topicNode = tupleData.getFirst();
+            List<TupleDe<Integer, Integer>> subTopics = tupleData.getSecond();
+
+            Set<Boolean> topicSet = new HashSet<>(topicNode);  // Set of topics for this subscriber
+
+            // Populate hostDataMap for the subscriber
+            hostDataMap.put(subscriberID, Collections.singletonList(tupleData));
+
+            // Process each connection to the KDC
+            for (DTNHost kdc : SimScenario.getInstance().getHosts()) {
+                // Check if the subscriber has reached the subscription threshold
+                int currentSubscriptionCount = subscriptionCountMap.getOrDefault(kdc, 0);
+                if (currentSubscriptionCount >= SUBSCRIPTION_THRESHOLD) {
+                    return false;
+                }
+                for (Connection con : kdc.getConnections()) {
+                    DTNHost getKdc = con.getOtherNode(kdc);
+                    if (getKdc != null && getKdc.isKDC()) {
+                        // For each registered topic, check if the topic matches
+                        for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> registeredEntry : registeredTopics.entrySet()) {
+                            for (TupleDe<Boolean, Integer> tuple : registeredEntry.getValue()) {
+                                if (topicSet.contains(tuple.getFirst())) {
+                                    // Add the host data to the message property
+                                    m.addProperty("KDC_Subscribe_", hostDataMap);
+                                    addMessageToHosts(m, getKdc);
+                                    // Increment the subscription count only once after successful subscription
+                                    subscriptionCountMap.put(getKdc, currentSubscriptionCount + 1);
+                                    return true; // Message successfully sent to KDC
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+        }
+
+        return false; // No KDCs found or no matching topics
+    }
+
+
 
     /**
      * Retrieves registered topics from the given message.
@@ -55,69 +141,14 @@ public class Subscribe {
     }
 
     /**
-     * Retrieves all available brokers in the network.
+     * Adds the given message to the buffers of the provided hosts.
      *
-     * @return A list of DTNHost objects representing brokers.
+     * @param m     The message to be added.
+     * @param hosts The list of hosts to which the message should be added.
      */
-    private List<DTNHost> getAllBrokers() {
-        return new GetAllBroker().getAllBrokers();
+    private void addMessageToHosts(Message m, DTNHost hosts) {
+        hosts.addBufferToHost(m);
     }
 
-    /**
-     * Retrieves all available KDCs in the network.
-     *
-     * @return A list of DTNHost objects representing KDCs.
-     */
-    private List<DTNHost> getAllKDCs() {
-        return new GetAllKDC().getAllKDCs();
-    }
 
-    /**
-     * Processes the subscription request by matching topics between the subscriber
-     * and registered topics. If a match is found, it registers the subscriber and
-     * forwards the subscription to brokers and KDCs.
-     *
-     * @param m              The message object containing subscription data.
-     * @param other          The subscribing DTNHost.
-     * @param registeredTopics The list of registered topics.
-     * @param topicNode      The topic profile of the subscriber.
-     * @param subTopics      The numeric attributes associated with the subscriber.
-     * @param brokers        The list of available brokers.
-     * @param kdcs           The list of available KDCs.
-     * @return true if subscription is successful, false otherwise.
-     */
-    private boolean processSubscription(Message m, DTNHost other,
-                                        Map<DTNHost, List<TupleDe<Boolean, Integer>>> registeredTopics,
-                                        List<Boolean> topicNode,
-                                        List<TupleDe<Integer, Integer>> subTopics,
-                                        List<DTNHost> brokers,
-                                        List<DTNHost> kdcs) {
-        Set<Boolean> topicSet = new HashSet<>(topicNode);
-        Map<DTNHost, List<TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>>> hostDataMap = new HashMap<>();
-        TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>> tupleData = new TupleDe<>(topicNode, subTopics);
-
-        for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : registeredTopics.entrySet()) {
-            for (TupleDe<Boolean, Integer> tuple : entry.getValue()) {
-                if (topicSet.contains(tuple.getFirst())) {
-                    hostDataMap.put(other, Collections.singletonList(tupleData));
-                    m.addProperty("KDC_Subscribe_", hostDataMap);
-
-                    // **Subscriber bertemu broker, lalu addBufferToHost**
-                    for (DTNHost broker : brokers) {
-                        broker.addBufferToHost(m);
-                    }
-
-                    // **Broker meneruskan ke KDC jika ada**
-                    if (!kdcs.isEmpty()) {
-                        for (DTNHost kdc : kdcs) {
-                            kdc.addBufferToHost(m);
-                        }
-                    }
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
 }

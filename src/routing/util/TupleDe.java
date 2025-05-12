@@ -46,6 +46,17 @@ public class TupleDe<A, B> {
         return size;
     }
 
+    /**
+     * 🔹 Returns the number of non-null elements in the tuple
+     */
+    public int size() {
+        int count = 0;
+        if (first != null) count++;
+        if (second != null) count++;
+        return count;
+    }
+
+
     /** 🔹 Helper method to determine object size */
     private int getObjectSize(Object obj) {
         if (obj == null) return 0;
