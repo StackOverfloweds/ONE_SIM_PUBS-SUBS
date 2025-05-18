@@ -4,8 +4,6 @@ import core.Connection;
 import core.DTNHost;
 import core.Message;
 import core.SimScenario;
-import routing.KDC.GetAllKDC;
-import routing.PublishAndSubscriberRouting;
 import routing.util.TupleDe;
 
 import java.util.*;

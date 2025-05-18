@@ -5,10 +5,11 @@ import core.SimScenario;
 import routing.CCDTN;
 import routing.PublishAndSubscriberRouting;
 
-import java.util.*;
-import java.io.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-public class SubscriberGetKey extends Report {
+public class PublisherGetKey extends Report {
 
     @Override
     public void done() {
@@ -16,22 +17,22 @@ public class SubscriberGetKey extends Report {
         Map<DTNHost, Integer> aggregatedKeys = new HashMap<>();
         int totalKeys = 0;
 
-        write("Rata-Rata Total Key Per Subscriber\n");
+        write("Rata-Rata Total Key Per Publisher\n");
 
         for (DTNHost host : hosts) {
             if (host.getRouter() instanceof CCDTN) {
                 CCDTN router = (CCDTN) host.getRouter();
                 if (router instanceof PublishAndSubscriberRouting) {
                     PublishAndSubscriberRouting routing = (PublishAndSubscriberRouting) router;
-                    Map<DTNHost, Integer> localKeys = routing.getKeys();
+                    Map<DTNHost, Integer> localKeys = routing.getKeysPublisher();
 
                     if (localKeys != null) {
                         for (Map.Entry<DTNHost, Integer> entry : localKeys.entrySet()) {
-                            DTNHost subscriber = entry.getKey();
+                            DTNHost publisher = entry.getKey();
                             Integer numberKey = entry.getValue();
 
-                            // Aggregate keys per subscriber
-                            aggregatedKeys.merge(subscriber, numberKey, Integer::sum);
+                            // Aggregate keys per publisher
+                            aggregatedKeys.merge(publisher, numberKey, Integer::sum);
 
                             // Add to totalKeys
                             totalKeys += numberKey;
@@ -40,11 +41,11 @@ public class SubscriberGetKey extends Report {
                 }
             }
         }
-        int totalSubscribers = aggregatedKeys.size();
-        int averageKeysPerSubscriber = totalSubscribers > 0
-                ? totalKeys / totalSubscribers
+        int totalPublisher = aggregatedKeys.size();
+        int averageKeysPerSubscriber = totalPublisher > 0
+                ? totalKeys / totalPublisher
                 : 0;
-        write("Total Subscribers: " + totalSubscribers + "\n");
+        write("Total Publisher: " + totalPublisher + "\n");
         write("Total Keys: " + totalKeys + "\n");
         write("Average Keys per Subscriber: " + averageKeysPerSubscriber + "\n");
 

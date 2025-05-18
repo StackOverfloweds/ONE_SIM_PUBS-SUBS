@@ -56,7 +56,7 @@ public class MessageCreateEventNAKT extends MessageEvent {
         boolean registrationData = register.sendMsgForRegistration(from, m);
         boolean eventCreated = false;
         if (registrationData) {
-            boolean subscribeData = subscribe.sendMsgForSubscribe(m, to);
+            boolean subscribeData = subscribe.sendMsgForSubscribe(m);
             if (subscribeData) {
                 eventCreated = true;
             }

@@ -9,6 +9,7 @@ package routing;
 import core.*;
 import routing.KDC.NAKT.KDCLoad;
 import routing.KDC.Publisher.EncryptionUtil;
+import routing.KDC.Publisher.KeyPublisher;
 import routing.KDC.Subscriber.KeySubscriber;
 import routing.util.TupleDe;
 
@@ -19,7 +20,7 @@ import java.util.*;
  * for Delay-Tolerant Networks (DTNs). It manages secure encryption, subscriber authentication,
  * and message forwarding using Numeric Attribute Key Trees (NAKT).
  */
-public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber, KDCLoad {
+public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber, KDCLoad, KeyPublisher {
     // Namespace settings
     private static final String PUBSROUTING_NS = "PublishAndSubscriberRouting";
 
@@ -311,6 +312,23 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
         return result;
     }
 
+    public Map<DTNHost, Integer> getKeysPublisher() {
+        if (numberKeyLoadPublisher == null || numberKeyLoadPublisher.isEmpty()) {
+            return Collections.emptyMap(); // Return an empty map instead of null
+        }
+
+        // Returns a mapping from subscriber (DTNHost) to the number of keys
+        Map<DTNHost, Integer> result = new HashMap<>();
+        for (Map.Entry<DTNHost, Integer> entry : numberKeyLoadPublisher.entrySet()) {
+            DTNHost publisher = entry.getKey();   // The publisher (host)
+            Integer keyCount = entry.getValue();   // Number of keys for the publisher
+            if (publisher != null && keyCount != null) {
+                result.put(publisher, keyCount);
+            }
+        }
+        return result;
+    }
+
 
     public Map<DTNHost, Integer> getKDCLoad() {
         if (kdcLoad == null || kdcLoad.isEmpty()) {
@@ -327,6 +345,38 @@ public class PublishAndSubscriberRouting extends CCDTN implements KeySubscriber,
         }
 
         return computedKDCLoad;
+    }
+
+    public Map<DTNHost, Message> loadMsKDC() {
+        Map<DTNHost, Message> result = new HashMap<>();
+
+        // Get the message collection
+        Collection<Message> msgCollection = getMessageCollection();
+        if (msgCollection.isEmpty()) {
+            return result; // Return an empty map instead of null
+        }
+
+        DTNHost host = getHost();
+
+        // Get all connections
+        Collection<Connection> connections = getConnections();
+        if (connections == null || connections.isEmpty()) {
+            return result; // Return an empty map instead of null
+        }
+
+        for (Connection con : connections) {
+            DTNHost otherHost = con.getOtherNode(host);
+            if (otherHost.isKDC()) {
+                // Add the first available message to the corresponding KDC
+                for (Message msg : msgCollection) {
+                    if (msg != null) {
+                        result.put(otherHost, msg); // Store one message per otherHost
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
 }

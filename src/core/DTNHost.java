@@ -351,6 +351,9 @@ public class DTNHost implements Comparable<DTNHost> {
     public int getRemainingBuffer() {
         return router.getFreeBufferSize();
     }
+    public int getTotalBuffer() {
+        return router.getBufferSize();
+    }
 
     /**
      * Returns routing info of this host's router.

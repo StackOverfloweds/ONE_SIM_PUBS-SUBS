@@ -2,7 +2,7 @@
 Scenario.name = PUBS_SUBS
 Scenario.simulateConnections = true
 Scenario.updateInterval = 0.1
-Scenario.endTime = 86400
+Scenario.endTime = 43200
 
 # 274883
 
@@ -34,21 +34,21 @@ Group.msgTtl = 10000
 Group1.groupID = P
 Group1.movementModel = RandomWalk
 Group1.router = PublishAndSubscriberRouting
-Group1.nrofHosts = 15
+Group1.nrofHosts = 10
 Group1.bufferSize = 256M
 
 # Broker Group (B) - Message Forwarding
 Group2.groupID = B
 Group2.movementModel = RandomWalk
 Group2.router = PublishAndSubscriberRouting
-Group2.nrofHosts = 56
+Group2.nrofHosts = 66
 Group2.bufferSize = 512M
 
 # Subscriber Group (S) - Message Consumers
 Group3.groupID = S
 Group3.movementModel = RandomWalk
 Group3.router = PublishAndSubscriberRouting
-Group3.nrofHosts = 15
+Group3.nrofHosts = 10
 Group3.bufferSize = 256M
 
 # Key Distribution Center (KDC) - 10 hosts (distributed across 10 groups)
@@ -162,11 +162,12 @@ MapBasedMovement.nrofMapFiles = 1
 MapBasedMovement.mapFile1 = data/roads.wkt
 
 # Reports
-Report.nrofReports = 2
+Report.nrofReports = 3
 Report.warmup = 0
 Report.reportDir = reports/PublishAndSubscribe
 Report.report1 = SubscriberGetKey
-Report.report2 = PSGuardLoadWithBuffer
+Report.report2 = PublisherGetKey
+Report.report3 = PSGuardLoadWithBuffer
 
 # Optimization settings
 Optimization.cellSizeMult = 5

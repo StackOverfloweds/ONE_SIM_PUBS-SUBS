@@ -59,7 +59,7 @@ public class PSGuardLoadWithBuffer extends Report implements UpdateListener {
      */
     private void computePSGuardCostWithBuffer(DTNHost host) {
         // Compute the dynamically calculated computing cost
-        int usedBuffer = host.getRemainingBuffer() - host.getRemainingBuffer(); // Used buffer size in bytes
+        int usedBuffer = host.getRemainingBuffer(); // Used buffer size in bytes
         int dynamicComputingCost = calculateDynamicComputingCost(usedBuffer); // Determine cost based on buffer usage
         totalComputingCostPSGuard += dynamicComputingCost;
 

@@ -2,7 +2,6 @@ package routing.KDC.NAKT;
 
 import core.*;
 import routing.CCDTN;
-import routing.KDC.Broker.GetAllBroker;
 import routing.util.TupleDe;
 
 import java.util.*;
@@ -57,8 +56,6 @@ public class NAKTBuilder extends KeyManager {
             if (registerData == null || registerData.isEmpty() || getUnSubs == null || getUnSubs.isEmpty()) {
                 continue;
             }
-
-
             int processCount = 0; // Track the number of key derivation & distribution operations
             for (Map.Entry<DTNHost, List<TupleDe<Boolean, Integer>>> entry : registerData.entrySet()) {
                 DTNHost publisher = entry.getKey();
@@ -80,29 +77,17 @@ public class NAKTBuilder extends KeyManager {
                             // 🔹 Ensure publisher only gets a key once
                             if (!keyEncryption.containsKey(publisher)) {
                                 handleEncryption(publisher, topicVal, secondValue, msg);
-                                processCount++;
                             }
                             // 🔹 Ensure subscriber only gets a key once
                             if (!keyAuthentication.containsKey(subscriber)) {
                                 handleAuthentication(subscriber, topicVal, secondValue, getUnSubs, msg);
-                                processCount++;
 
                             }
                         }
                     }
                 }
             }
-
-            // Save load count only if actual processing took place
-            if (processCount > 0) {
-                if (kdcLoad.containsKey(kdcHost)) {
-                    kdcLoad.put(kdcHost, kdcLoad.get(kdcHost) + processCount);
-                } else {
-                    kdcLoad.put(kdcHost, processCount);
-                    numKeyLoadPublisher.put(kdcHost, 0);
-                }
-                success = true;
-            }
+            success = true;
         }
 
         return success;
@@ -124,6 +109,7 @@ public class NAKTBuilder extends KeyManager {
         if (selectedKey != null) {
             if (!keyEncryption.containsKey(publisher) || !keyEncryption.get(publisher).equals(selectedKey)) {
                 keyEncryption.put(publisher, selectedKey);
+                numKeyLoadPublisher.put(publisher, 1);
                 msg.addProperty("KDC_Key_Encryption_", keyEncryption);
                 addMessageToHostsAndForward(msg);
             }
@@ -290,17 +276,18 @@ public class NAKTBuilder extends KeyManager {
                 if (other != null && other.isBroker()) {
                     if (msg.getProperty("KDC_Register_") != null) {
                         other.addBufferToHost(msg);
-                        publisherForward(msg);
+                        ForwardMSG(msg);
                     }
                     if (msg.getProperty("KDC_Subscribe_") != null) {
                         other.addBufferToHost(msg);
+                        ForwardMSG(msg);
                     }
                 }
             }
         }
     }
 
-    private void publisherForward(Message msg) {
+    private void ForwardMSG(Message msg) {
         for (DTNHost host : SimScenario.getInstance().getHosts()) {
             for (Connection con : host.getConnections()) {
                 DTNHost other = con.getOtherNode(host);

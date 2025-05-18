@@ -11,8 +11,6 @@ import routing.util.TupleDe;
 import java.util.*;
 
 public class Subscribe {
-    private Map<DTNHost, Integer> subscriptionCountMap = new HashMap<>();
-    private static final int SUBSCRIPTION_THRESHOLD = 5;  // Limit the number of subscriptions to 20
 
     /**
      * Handles the subscription process for a given DTNHost.
@@ -20,32 +18,34 @@ public class Subscribe {
      * If conditions are met, processes the subscription.
      *
      * @param m     The message object containing subscription data.
-     * @param other The host that wants to subscribe.
      * @return true if subscription is successful, false otherwise.
      */
-    public boolean sendMsgForSubscribe(Message m, DTNHost other) {
-        if (m == null || other == null) {
+    public boolean sendMsgForSubscribe(Message m) {
+        if (m == null) {
             return false;
         }
-
-        Map<DTNHost, List<TupleDe<Boolean, Integer>>> registeredTopics = getRegisteredTopics(m);
-        if (registeredTopics == null || registeredTopics.isEmpty()) {
-            return false;
+        List<DTNHost> getAllHost = SimScenario.getInstance().getHosts();
+        for (DTNHost host : getAllHost) {
+            for (Connection con : host.getConnections()) {
+                DTNHost otherSubscriber = con.getOtherNode(host);
+                if (otherSubscriber != null && otherSubscriber.isSubscriber()) {
+                    Map<DTNHost, List<TupleDe<Boolean, Integer>>> registeredTopics = getRegisteredTopics(m);
+                    if (registeredTopics == null || registeredTopics.isEmpty()) {
+                        return false;
+                    }
+                    List<Boolean> topicNode = otherSubscriber.getSocialProfileOI();
+                    List<TupleDe<Integer, Integer>> subTopics = otherSubscriber.getNumericAtribute();
+                    if (topicNode == null || subTopics == null || subTopics.isEmpty()) {
+                        return false;
+                    }
+                    // Create the new Map structure to store topicNode and subTopics
+                    Map<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> topicSubTopicMap = new HashMap<>();
+                    topicSubTopicMap.put(otherSubscriber, new TupleDe<>(topicNode, subTopics));
+                    return processSubscription(m, registeredTopics, topicSubTopicMap);
+                }
+            }
         }
-
-        List<Boolean> topicNode = other.getSocialProfileOI();
-        List<TupleDe<Integer, Integer>> subTopics = other.getNumericAtribute();
-        if (topicNode == null || subTopics == null || subTopics.isEmpty()) {
-            return false;
-        }
-
-        if (registeredTopics.isEmpty()) {
-            return false;
-        }
-        // Create the new Map structure to store topicNode and subTopics
-        Map<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> topicSubTopicMap = new HashMap<>();
-        topicSubTopicMap.put(other, new TupleDe<>(topicNode, subTopics));
-        return processSubscription(m, registeredTopics, topicSubTopicMap);
+        return false;
     }
 
     /**
@@ -77,7 +77,7 @@ public class Subscribe {
     /**
      * Sends the subscription message to KDCs connected to the given DTNHost.
      *
-     * @param m     The message to send.
+     * @param m The message to send.
      * @return true if the message is successfully sent to KDCs, false otherwise.
      */
     private boolean sendMessageToKDCs(Message m, Map<DTNHost, List<TupleDe<Boolean, Integer>>> registeredTopics, Map<DTNHost, TupleDe<List<Boolean>, List<TupleDe<Integer, Integer>>>> topicSubTopicMap) {
@@ -99,10 +99,6 @@ public class Subscribe {
             // Process each connection to the KDC
             for (DTNHost kdc : SimScenario.getInstance().getHosts()) {
                 // Check if the subscriber has reached the subscription threshold
-                int currentSubscriptionCount = subscriptionCountMap.getOrDefault(kdc, 0);
-                if (currentSubscriptionCount >= SUBSCRIPTION_THRESHOLD) {
-                    return false;
-                }
                 for (Connection con : kdc.getConnections()) {
                     DTNHost getKdc = con.getOtherNode(kdc);
                     if (getKdc != null && getKdc.isKDC()) {
@@ -113,8 +109,6 @@ public class Subscribe {
                                     // Add the host data to the message property
                                     m.addProperty("KDC_Subscribe_", hostDataMap);
                                     addMessageToHosts(m, getKdc);
-                                    // Increment the subscription count only once after successful subscription
-                                    subscriptionCountMap.put(getKdc, currentSubscriptionCount + 1);
                                     return true; // Message successfully sent to KDC
                                 }
                             }
@@ -127,7 +121,6 @@ public class Subscribe {
 
         return false; // No KDCs found or no matching topics
     }
-
 
 
     /**
